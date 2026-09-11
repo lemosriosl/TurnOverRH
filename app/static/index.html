@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Turnover RH — produção</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body>
+
+<header>
+  <h1>Turnover RH <span>· console de produção</span></h1>
+  <div id="estado">
+    <span id="versao">carregando…</span>
+    <button class="discreto" id="btn-recarregar">Recarregar modelo</button>
+  </div>
+</header>
+
+<nav class="abas">
+  <button class="aba ativa" data-painel="p-lista">Colaboradores</button>
+  <button class="aba" data-painel="p-novo">Novo colaborador</button>
+  <button class="aba" data-painel="p-lote">Enviar lote</button>
+</nav>
+
+<main>
+
+<!-- colaboradores -->
+<section id="p-lista" class="painel ativo">
+  <div class="cabeca">
+    <div>
+      <h2>Colaboradores avaliados</h2>
+      <p class="ajuda">Todo mundo que já passou pelo modelo, do maior risco para o menor.</p>
+    </div>
+    <div class="resumo" id="resumo"></div>
+  </div>
+
+  <div class="filtros">
+    <input type="search" id="busca" placeholder="buscar por id ou lote…">
+    <button class="chip ativo" data-faixa="todas">todas</button>
+    <button class="chip" data-faixa="alerta">alerta</button>
+    <button class="chip" data-faixa="atencao">atenção</button>
+    <button class="chip" data-faixa="ok">ok</button>
+  </div>
+
+  <div id="cards" class="cards"></div>
+  <p class="vazio" id="vazio">Nenhum colaborador avaliado ainda. Use as outras abas.</p>
+</section>
+
+<!-- novo colaborador -->
+<section id="p-novo" class="painel">
+  <h2>Avaliar um colaborador</h2>
+  <p class="ajuda">Os números são os mesmos que saíram da Aula 3, um colaborador por vez.
+     A resposta é a probabilidade de ele pedir demissão.</p>
+
+  <form id="form">
+    <label class="id-linha">id do colaborador
+      <input type="text" name="id_pessoa" placeholder="ex: 90001">
+    </label>
+
+    <fieldset>
+      <legend>Absenteísmo</legend>
+      <div class="grade">
+        <label>eventos <input type="number" step="any" name="abs_eventos" value="0"></label>
+        <label>qtd total <input type="number" step="any" name="abs_qtd_total" value="0"></label>
+        <label>horas previstas <input type="number" step="any" name="horas_previstas_total" value="0"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Acidentes</legend>
+      <div class="grade">
+        <label>eventos <input type="number" step="any" name="acidentes_eventos" value="0"></label>
+        <label>com afastamento <input type="number" step="any" name="acidentes_com_afastamento" value="0"></label>
+        <label>dias perdidos <input type="number" step="any" name="acidentes_dias_perdidos" value="0"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Hora extra</legend>
+      <div class="grade">
+        <label>eventos <input type="number" step="any" name="he_eventos" value="0"></label>
+        <label>referência total <input type="number" step="any" name="he_referencia_total" value="0"></label>
+        <label>valor total <input type="number" step="any" name="he_valor_total" value="0"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Marcações irregulares</legend>
+      <div class="grade">
+        <label>eventos <input type="number" step="any" name="hi_eventos" value="0"></label>
+        <label>minutos irregulares <input type="number" step="any" name="hi_minutos_irregulares" value="0"></label>
+        <label>minutos extras <input type="number" step="any" name="hi_minutos_extras" value="0"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Movimentação salarial</legend>
+      <div class="grade">
+        <label>eventos <input type="number" step="any" name="mov_sal_eventos" value="0"></label>
+        <label>valor total <input type="number" step="any" name="mov_sal_valor_total" value="0"></label>
+        <label>percentual médio <input type="number" step="any" name="mov_sal_perc_medio" value="0"></label>
+      </div>
+    </fieldset>
+
+    <div class="acoes">
+      <button type="submit" class="primario">Calcular risco</button>
+      <button type="button" class="discreto" id="btn-exemplo">Caso de risco alto</button>
+      <button type="button" class="discreto" id="btn-exemplo-baixo">Caso de risco baixo</button>
+      <button type="button" class="discreto" id="btn-zerar">Zerar</button>
+    </div>
+  </form>
+
+  <div id="resultado">
+    <div class="leitura">
+      <div id="prob">—</div>
+      <div id="veredito"></div>
+    </div>
+    <div class="regua">
+      <div class="marca" id="marca-atencao"></div>
+      <div class="marca" id="marca-alerta"></div>
+      <div class="agulha" id="agulha"></div>
+    </div>
+    <div class="escala"><span>0%</span><span id="rot-faixas"></span><span>100%</span></div>
+    <div class="saida" id="json"></div>
+  </div>
+</section>
+
+<!-- enviar lote -->
+<section id="p-lote" class="painel">
+  <h2>Enviar um lote</h2>
+  <p class="ajuda">Um CSV com muitos colaboradores — o que o RH manda todo mês.
+     Cada linha é pontuada e gravada na tabela <span class="mono">predicoes</span>.
+     O nome do arquivo vira o nome do lote.</p>
+
+  <input type="file" id="arquivo" accept=".csv">
+  <div class="acoes"><button class="primario" id="btn-lote">Pontuar lote</button></div>
+  <div class="saida" id="saida-lote" style="display:none"></div>
+
+  <h2 style="margin-top:26px">Lotes já pontuados</h2>
+  <table id="tabela-lotes"><thead><tr>
+    <th>lote</th><th>linhas</th><th>versão</th><th>quando</th></tr></thead><tbody></tbody></table>
+
+  <p class="nota">Pontuar não cria nada no MLflow. A predição vira linha no banco
+     da aplicação. O MLflow só muda quando você registra, promove ou monitora.</p>
+</section>
+
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+let FAIXAS = {atencao: 0.5, alerta: 0.6};
+let TODOS = [];
+let filtro = 'todas';
+const ROTULO = {ok: 'ok', atencao: 'atenção', alerta: 'alerta'};
+
+// abas
+$$('.aba').forEach(b => b.onclick = () => {
+  $$('.aba').forEach(x => x.classList.toggle('ativa', x === b));
+  $$('.painel').forEach(p => p.classList.toggle('ativo', p.id === b.dataset.painel));
+  if (b.dataset.painel === 'p-lista') carregarColaboradores();
+});
+
+// estado do modelo
+async function saude() {
+  const d = await (await fetch('/saude')).json();
+  FAIXAS = {atencao: d.faixa_atencao ?? 0.5, alerta: d.faixa_alerta ?? 0.6};
+  $('#versao').innerHTML = d.modelo_carregado
+    ? `modelo <b>v${d.versao_modelo}</b> · @${d.alias} · ${d.n_features} features`
+    : `<span class="off">nenhum modelo em produção — rode onboard_v1.py</span>`;
+
+  $('#marca-atencao').style.left = (FAIXAS.atencao * 100) + '%';
+  $('#marca-alerta').style.left  = (FAIXAS.alerta  * 100) + '%';
+  $('#rot-faixas').textContent =
+    `${(FAIXAS.atencao*100).toFixed(0)}% atenção · ${(FAIXAS.alerta*100).toFixed(0)}% alerta`;
+
+  const corpo = $('#tabela-lotes tbody');
+  corpo.innerHTML = '';
+  (d.lotes || []).forEach(l => corpo.insertAdjacentHTML('beforeend',
+    `<tr><td>${l.lote}</td><td>${l.n}</td><td>v${l.versoes}</td><td>${(l.quando||'').slice(0,16)}</td></tr>`));
+}
+
+$('#btn-recarregar').onclick = async () => {
+  await fetch('/recarregar', {method: 'POST'});
+  saude();
+};
+
+// lista de colaboradores
+async function carregarColaboradores() {
+  const d = await (await fetch('/colaboradores')).json();
+  TODOS = d.colaboradores || [];
+  const conta = f => TODOS.filter(c => c.faixa === f).length;
+  $('#resumo').innerHTML = TODOS.length
+    ? `<span class="tag-alerta">${conta('alerta')} alerta</span>
+       <span class="tag-atencao">${conta('atencao')} atenção</span>
+       <span class="tag-ok">${conta('ok')} ok</span>
+       <span class="tag-total">${TODOS.length} avaliados</span>`
+    : '';
+  desenhar();
+}
+
+function desenhar() {
+  const termo = $('#busca').value.trim().toLowerCase();
+  const lista = TODOS.filter(c =>
+    (filtro === 'todas' || c.faixa === filtro) &&
+    (!termo || String(c.id_pessoa).toLowerCase().includes(termo)
+            || String(c.lote).toLowerCase().includes(termo)));
+
+  $('#vazio').style.display = lista.length ? 'none' : 'block';
+  $('#vazio').textContent = TODOS.length
+    ? 'Nenhum colaborador nesse filtro.'
+    : 'Nenhum colaborador avaliado ainda. Use as outras abas.';
+
+  $('#cards').innerHTML = lista.map(c => `
+    <article class="card-col ${c.faixa}">
+      <div class="col-topo">
+        <span class="col-id">${c.id_pessoa}</span>
+        <span class="col-faixa">${ROTULO[c.faixa]}</span>
+      </div>
+      <div class="col-prob">${(c.probabilidade * 100).toFixed(1)}<span>%</span></div>
+      <div class="col-barra"><i style="width:${(c.probabilidade * 100).toFixed(1)}%"></i></div>
+      <div class="col-pe">lote ${c.lote} · modelo v${c.versao_modelo}</div>
+    </article>`).join('');
+}
+
+$('#busca').oninput = desenhar;
+$$('.chip').forEach(b => b.onclick = () => {
+  $$('.chip').forEach(x => x.classList.toggle('ativo', x === b));
+  filtro = b.dataset.faixa;
+  desenhar();
+});
+
+// um colaborador
+$('#form').onsubmit = async (e) => {
+  e.preventDefault();
+  const dados = {};
+  new FormData($('#form')).forEach((v, k) => {
+    dados[k] = (k === 'id_pessoa') ? (v || null) : (parseFloat(v) || 0);
+  });
+
+  const d = await (await fetch('/prever', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(dados)
+  })).json();
+
+  $('#resultado').style.display = 'block';
+  if (d.erro) {
+    $('#json').textContent = d.erro;
+    $('#json').classList.add('erro');
+    return;
+  }
+  $('#json').classList.remove('erro');
+
+  const faixa = d.probabilidade >= FAIXAS.alerta ? 'alerta'
+              : d.probabilidade >= FAIXAS.atencao ? 'atencao' : 'ok';
+  $('#prob').textContent = (d.probabilidade * 100).toFixed(1) + '%';
+  $('#prob').className = faixa;
+  $('#veredito').innerHTML =
+    `<b class="v-${faixa}">${ROTULO[faixa]}</b> · classe ${d.classe} · modelo v${d.versao_modelo}`;
+  $('#agulha').style.left = (d.probabilidade * 100) + '%';
+  $('#json').textContent = JSON.stringify(d, null, 2);
+  carregarColaboradores();
+};
+
+// Dois perfis reais da base, para ver as cores mudarem.
+const EXEMPLOS = {
+  alto: {
+    abs_eventos: 0, abs_qtd_total: 0, horas_previstas_total: 0,
+    acidentes_eventos: 1, acidentes_com_afastamento: 0, acidentes_dias_perdidos: 0,
+    he_eventos: 10, he_referencia_total: 34.01, he_valor_total: 319.51,
+    hi_eventos: 1, hi_minutos_irregulares: 377, hi_minutos_extras: 0,
+    mov_sal_eventos: 1, mov_sal_valor_total: 32.56, mov_sal_perc_medio: 0.0246
+  },
+  baixo: {
+    abs_eventos: 0, abs_qtd_total: 0, horas_previstas_total: 0,
+    acidentes_eventos: 0, acidentes_com_afastamento: 0, acidentes_dias_perdidos: 0,
+    he_eventos: 57, he_referencia_total: 528.42, he_valor_total: 7349.76,
+    hi_eventos: 205, hi_minutos_irregulares: 89239, hi_minutos_extras: 0,
+    mov_sal_eventos: 12, mov_sal_valor_total: 812.73, mov_sal_perc_medio: 0.0479
+  }
+};
+
+function preencher(qual) {
+  for (const [k, v] of Object.entries(EXEMPLOS[qual])) {
+    const el = document.querySelector(`[name="${k}"]`);
+    if (el) el.value = v;
+  }
+  document.querySelector('[name="id_pessoa"]').value =
+    qual + '-' + Math.floor(Math.random() * 1000);
+}
+
+$('#btn-exemplo').onclick = () => preencher('alto');
+$('#btn-exemplo-baixo').onclick = () => preencher('baixo');
+
+$('#btn-zerar').onclick = () => {
+  $$('#form input[type=number]').forEach(i => i.value = 0);
+  document.querySelector('[name="id_pessoa"]').value = '';
+  $('#resultado').style.display = 'none';
+};
+
+// lote
+$('#btn-lote').onclick = async () => {
+  const f = $('#arquivo').files[0];
+  const saida = $('#saida-lote');
+  saida.style.display = 'block';
+  if (!f) {
+    saida.textContent = 'Escolha um CSV primeiro.';
+    saida.classList.add('erro');
+    return;
+  }
+  const fd = new FormData();
+  fd.append('arquivo', f);
+  saida.textContent = 'pontuando…';
+  saida.classList.remove('erro');
+
+  const d = await (await fetch('/lote', {method: 'POST', body: fd})).json();
+  saida.classList.toggle('erro', !!d.erro);
+  saida.textContent = JSON.stringify(d, null, 2);
+  saude();
+  carregarColaboradores();
+};
+
+saude();
+carregarColaboradores();
+</script>
+</body>
+</html>

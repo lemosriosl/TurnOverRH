@@ -1,0 +1,2542 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLOps Aula 1 — Do .pkl para produção</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #050a14; --cyan: #00e5ff; --green: #00ff88; --orange: #ff6b35;
+  --purple: #7c3aed; --pink: #f472b6; --text: #e8f4f8; --muted: #7fa8c0;
+  --card: rgba(255,255,255,0.04); --border: rgba(0,229,255,0.15);
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'IBM Plex Sans',sans-serif; }
+#bg { position:fixed; inset:0; z-index:0; opacity:.3; pointer-events:none; }
+#progress-bar { position:fixed; top:0; left:0; height:3px; z-index:200; background:linear-gradient(90deg, var(--cyan), var(--purple)); transition: width .4s ease; }
+#topbar { position:fixed; top:0; left:0; right:0; height:52px; z-index:150; background:rgba(5,10,20,.88); backdrop-filter:blur(14px); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 32px; }
+.tb-label { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--cyan); letter-spacing:2px; text-transform:uppercase; }
+.tb-counter { font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted); }
+.tb-title { font-size:13px; color:var(--muted); max-width:360px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#slides { position:fixed; inset:0; z-index:1; }
+.slide { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:flex-start; align-items:center; padding:72px 60px 80px; opacity:0; pointer-events:none; transition: opacity .5s ease, transform .5s ease; transform: translateX(60px); overflow-y:auto; }
+.slide.active { opacity:1; pointer-events:all; transform:translateX(0); }
+.slide.prev { opacity:0; pointer-events:none; transform:translateX(-60px); }
+.slide-inner { width:100%; max-width:1080px; margin:auto 0; }
+#nav-prev, #nav-next { position:fixed; top:50%; z-index:200; transform:translateY(-50%); width:48px; height:48px; border-radius:50%; border:1px solid var(--border); background:rgba(5,10,20,.7); backdrop-filter:blur(8px); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--cyan); transition:all .2s; user-select:none; }
+#nav-prev { left:16px; } #nav-next { right:16px; }
+#nav-prev:hover, #nav-next:hover { background:rgba(0,229,255,.12); border-color:var(--cyan); }
+#nav-prev.disabled, #nav-next.disabled { opacity:.25; pointer-events:none; }
+#dots { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); display:flex; gap:6px; z-index:200; flex-wrap:wrap; max-width:70%; justify-content:center; }
+.dot { width:7px; height:7px; border-radius:50%; background:var(--muted); opacity:.4; cursor:pointer; transition:all .3s; }
+.dot.active { background:var(--cyan); opacity:1; transform:scale(1.3); }
+.dot.done { background:var(--green); opacity:.8; }
+
+.tag  { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--cyan);   letter-spacing:3px; text-transform:uppercase; margin-bottom:10px; display:block; }
+.gtag { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--green);  letter-spacing:3px; text-transform:uppercase; margin-bottom:10px; display:block; }
+.ptag { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--purple); letter-spacing:3px; text-transform:uppercase; margin-bottom:10px; display:block; }
+.otag { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--orange); letter-spacing:3px; text-transform:uppercase; margin-bottom:10px; display:block; }
+
+h1.hero-title { font-family:'Syne',sans-serif; font-size:clamp(2.2rem,4.6vw,4rem); font-weight:800; line-height:1.08; margin-bottom:20px; }
+h2.sec-title  { font-family:'Syne',sans-serif; font-size:clamp(1.4rem,3vw,2.3rem); font-weight:800; line-height:1.18; margin-bottom:12px; }
+h3.slide-h3   { font-family:'Syne',sans-serif; font-size:1.15rem; font-weight:700; margin-bottom:14px; }
+p.lead { color:var(--muted); font-size:.98rem; line-height:1.7; margin-bottom:22px; }
+
+.badge { display:inline-flex; align-items:center; gap:8px; background:rgba(0,229,255,.08); border:1px solid var(--border); border-radius:20px; padding:6px 16px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--cyan); letter-spacing:1px; margin-bottom:26px; width:fit-content; }
+.badge::before { content:''; width:7px; height:7px; background:var(--green); border-radius:50%; animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.5)} }
+.hero-q { background:linear-gradient(135deg,rgba(0,229,255,.06),rgba(124,58,237,.06)); border:1px solid rgba(0,229,255,.2); border-left:4px solid var(--cyan); border-radius:12px; padding:20px 26px; font-size:1.02rem; color:var(--text); max-width:800px; margin-top:6px; animation:fadeUp .8s ease both .3s; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+.card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; }
+.g2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.g3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+@media(max-width:680px){.g2,.g3{grid-template-columns:1fr}}
+.pill-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:24px; }
+.pill { background:rgba(0,255,136,.07); border:1px solid rgba(0,255,136,.25); border-radius:20px; padding:5px 14px; font-size:12px; color:var(--green); font-family:'IBM Plex Mono',monospace; }
+.bridge { background:linear-gradient(135deg,rgba(0,229,255,.05),rgba(124,58,237,.05)); border:1px solid rgba(0,229,255,.2); border-radius:14px; padding:22px 26px; }
+
+.bloco-mark { display:inline-flex; align-items:center; gap:10px; margin-bottom:14px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:2.5px; text-transform:uppercase; border-radius:20px; padding:5px 15px; }
+.bl-a { background:rgba(0,229,255,.09);  border:1px solid rgba(0,229,255,.35);  color:var(--cyan); }
+.bl-b { background:rgba(255,107,53,.09); border:1px solid rgba(255,107,53,.35); color:var(--orange); }
+.bl-c { background:rgba(0,255,136,.08);  border:1px solid rgba(0,255,136,.32);  color:var(--green); }
+
+.tbl { width:100%; border-collapse:collapse; font-size:.82rem; }
+.tbl th { text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--cyan); padding:9px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+.tbl td { padding:10px 12px; border-bottom:1px solid rgba(255,255,255,.05); color:var(--muted); vertical-align:top; line-height:1.5; }
+.tbl td strong, .tbl td code { color:var(--text); }
+.tbl td code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3); padding:1px 6px; border-radius:4px; font-size:.78rem; }
+.tbl tbody tr:hover td { background:rgba(0,229,255,.03); }
+.tbl tr.sep-a td { background:rgba(0,229,255,.05); }
+.tbl tr.sep-c td { background:rgba(0,255,136,.04); }
+
+.code { background:rgba(0,0,0,.42); border:1px solid var(--border); border-radius:10px; padding:14px 18px; font-family:'IBM Plex Mono',monospace; font-size:.74rem; line-height:1.7; overflow-x:auto; white-space:pre; color:#bfe4f2; max-height:52vh; overflow-y:auto; }
+.code .k { color:var(--pink); }
+.code .s { color:var(--green); }
+.code .c { color:var(--muted); font-style:italic; }
+.code .h { color:var(--cyan); font-weight:500; }
+.code .o { color:var(--orange); }
+.code-wrap { border:1px solid var(--border); border-radius:9px; overflow:hidden; margin-bottom:14px; transition:border-color .2s, box-shadow .2s; }
+.code-wrap.open { border-color:var(--cyan); box-shadow:0 0 0 1px rgba(0,229,255,.08); }
+.code-header { display:flex; justify-content:space-between; align-items:center; padding:9px 14px; background:rgba(0,0,0,.55); border-bottom:1px solid var(--border); cursor:pointer; user-select:none; transition:background .15s; gap:12px; }
+.code-header:hover { background:rgba(0,229,255,.06); }
+.code-header .fname { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--cyan); }
+.code-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.code-header .lbadge { font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+.code-toggle-btn { font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.5px; color:var(--cyan); border:1px solid var(--border); border-radius:20px; padding:3px 11px; white-space:nowrap; transition:.2s; background:rgba(0,229,255,.05); }
+.code-toggle-btn::before { content:'▸ '; }
+.code-wrap.open .code-toggle-btn { color:var(--bg); background:var(--green); border-color:var(--green); font-weight:600; }
+.code-wrap.open .code-toggle-btn::before { content:'▾ '; }
+.copy-btn { font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.5px; color:var(--purple); border:1px solid rgba(124,58,237,.4); border-radius:20px; padding:3px 11px; white-space:nowrap; transition:.2s; background:rgba(124,58,237,.08); cursor:pointer; display:none; }
+.copy-btn:hover { background:rgba(124,58,237,.2); color:var(--pink); }
+.copy-btn.done { color:var(--bg); background:var(--green); border-color:var(--green); font-weight:600; }
+.code-wrap.open .copy-btn { display:inline-block; }
+.code-wrap .code { display:none; border:none; border-radius:0; }
+.code-wrap.open .code { display:block; animation:codeIn .28s ease; }
+@keyframes codeIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+
+.step-marker { display:flex; align-items:center; gap:16px; margin-bottom:18px; }
+.step-num { font-family:'Syne',sans-serif; font-weight:800; font-size:1.6rem; width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center; background:rgba(0,229,255,.08); border:1px solid var(--border); color:var(--cyan); flex-shrink:0; }
+.step-num.b { background:rgba(255,107,53,.08); border-color:rgba(255,107,53,.3); color:var(--orange); }
+.step-num.c { background:rgba(0,255,136,.07); border-color:rgba(0,255,136,.3); color:var(--green); }
+.step-meta { display:flex; flex-direction:column; gap:2px; }
+.step-file { font-family:'IBM Plex Mono',monospace; font-size:.92rem; color:var(--text); }
+.step-obj { font-size:.78rem; color:var(--muted); }
+
+.callout { border-left:3px solid; border-radius:0 8px 8px 0; padding:12px 16px; margin:12px 0 0; font-size:.83rem; line-height:1.6; }
+.callout .ct { font-family:'IBM Plex Mono',monospace; font-weight:500; font-size:9.5px; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:5px; }
+.callout p { margin:0; color:var(--muted); font-size:.83rem; }
+.callout p + p { margin-top:8px; }
+.callout code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3); padding:1px 6px; border-radius:4px; color:var(--text); font-size:.78rem; }
+.co-ok   { border-color:var(--green);  background:rgba(0,255,136,.05); } .co-ok .ct { color:var(--green); }
+.co-warn { border-color:var(--orange); background:rgba(255,107,53,.05); } .co-warn .ct { color:var(--orange); }
+.co-info { border-color:var(--purple); background:rgba(124,58,237,.06); } .co-info .ct { color:#c4b5fd; }
+.co-err  { border-color:#ff4d6d; background:rgba(255,77,109,.06); } .co-err .ct { color:#ff8fa3; }
+
+.test-box { background:rgba(0,255,136,.04); border:1px solid rgba(0,255,136,.22); border-radius:12px; padding:16px 20px; margin-bottom:12px; }
+.test-box .tt { font-family:'Syne',sans-serif; font-weight:800; font-size:.88rem; color:var(--green); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+.test-box ol, .test-box ul { margin-left:18px; }
+.test-box li { font-size:.83rem; color:var(--muted); line-height:1.65; margin-bottom:4px; }
+.test-box li strong, .test-box li code { color:var(--text); }
+.test-box code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3); padding:1px 6px; border-radius:4px; font-size:.78rem; }
+
+.qa { width:100%; border-collapse:collapse; font-size:.82rem; }
+.qa td { padding:10px; border-bottom:1px solid rgba(255,255,255,.06); color:var(--muted); vertical-align:top; line-height:1.55; }
+.qa td.n { color:var(--green); font-family:'IBM Plex Mono',monospace; width:26px; text-align:center; }
+.qa tr:last-child td { border-bottom:none; }
+.acao { color:var(--text); font-size:.85rem; }
+.qa code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3); padding:1px 6px; border-radius:4px; color:var(--text); font-size:.76rem; }
+
+.final-check { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
+.fc-item { display:flex; align-items:center; gap:12px; padding:9px 16px; background:var(--card); border:1px solid var(--border); border-radius:10px; opacity:0; transform:translateX(-16px); }
+.final-check.play .fc-item { animation:fcIn .5s ease forwards; }
+.final-check.play .fc-item:nth-child(1){animation-delay:.04s}
+.final-check.play .fc-item:nth-child(2){animation-delay:.12s}
+.final-check.play .fc-item:nth-child(3){animation-delay:.20s}
+.final-check.play .fc-item:nth-child(4){animation-delay:.28s}
+.final-check.play .fc-item:nth-child(5){animation-delay:.36s}
+.final-check.play .fc-item:nth-child(6){animation-delay:.44s}
+.final-check.play .fc-item:nth-child(7){animation-delay:.52s}
+.final-check.play .fc-item:nth-child(8){animation-delay:.60s}
+.final-check.play .fc-item:nth-child(9){animation-delay:.68s}
+.final-check.play .fc-item:nth-child(10){animation-delay:.76s}
+.final-check.play .fc-item:nth-child(11){animation-delay:.84s}
+.final-check.play .fc-item:nth-child(12){animation-delay:.92s}
+.final-check.play .fc-item:nth-child(13){animation-delay:1.00s}
+@keyframes fcIn { to{opacity:1;transform:translateX(0)} }
+.fc-check { width:20px; height:20px; border-radius:50%; border:1px solid var(--green); color:var(--green); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; }
+.fc-text { font-size:.82rem; color:var(--text); font-family:'IBM Plex Mono',monospace; }
+
+.yn { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media(max-width:680px){ .yn{ grid-template-columns:1fr; } }
+.yn-col { border-radius:14px; padding:18px 20px; }
+.yn-yes { background:rgba(0,255,136,.05); border:1px solid rgba(0,255,136,.22); }
+.yn-no  { background:rgba(255,107,53,.05); border:1px solid rgba(255,107,53,.22); }
+.yn-col h4 { font-family:'Syne',sans-serif; font-size:.92rem; margin-bottom:12px; }
+.yn-col li { list-style:none; font-size:.82rem; color:var(--muted); line-height:1.55; padding:5px 0 5px 20px; position:relative; }
+.yn-yes li::before { content:'✓'; position:absolute; left:0; color:var(--green); }
+.yn-no  li::before { content:'✕'; position:absolute; left:0; color:var(--orange); }
+
+.next-pills { display:flex; flex-wrap:wrap; gap:10px; }
+.next-pill { font-family:'IBM Plex Mono',monospace; font-size:11.5px; padding:8px 15px; border-radius:20px; background:rgba(124,58,237,.08); border:1px solid rgba(124,58,237,.3); color:var(--pink); }
+.slide-scroll { overflow-y:auto; }
+.divider { height:1px; background:var(--border); margin:18px 0; }
+code.inline { font-family:'IBM Plex Mono',monospace; color:var(--cyan); background:rgba(0,229,255,.06); padding:1px 7px; border-radius:5px; font-size:.86em; }
+
+.ciclo { display:flex; align-items:stretch; gap:8px; flex-wrap:wrap; margin:10px 0 6px; }
+.ci-step { flex:1; min-width:132px; border-radius:12px; padding:14px; background:var(--card); border:1px solid var(--border); font-family:'IBM Plex Mono',monospace; font-size:.72rem; color:var(--muted); line-height:1.5; }
+.ci-step .ci-n { display:block; font-size:.68rem; letter-spacing:1.5px; margin-bottom:6px; opacity:.75; }
+.ci-step .ci-t { display:block; font-size:.86rem; color:var(--text); margin-bottom:5px; font-family:'Syne',sans-serif; font-weight:700; }
+.ci-a { border-color:rgba(0,229,255,.4);  background:rgba(0,229,255,.06); } .ci-a .ci-n { color:var(--cyan); }
+.ci-b { border-color:rgba(255,107,53,.4); background:rgba(255,107,53,.06); } .ci-b .ci-n { color:var(--orange); }
+.ci-c { border-color:rgba(0,255,136,.35); background:rgba(0,255,136,.05); } .ci-c .ci-n { color:var(--green); }
+
+.cadeia { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:12px 0 4px; }
+.cd-box { flex:1; min-width:150px; border-radius:10px; padding:13px 15px; text-align:center; background:rgba(255,77,109,.06); border:1px solid rgba(255,77,109,.28); font-family:'IBM Plex Mono',monospace; font-size:.74rem; color:#ffb3c1; line-height:1.5; }
+.cd-box.fim { background:rgba(255,77,109,.14); border-color:rgba(255,77,109,.5); color:#ff8fa3; font-weight:600; }
+.cd-arrow { color:#ff8fa3; font-size:1.3rem; flex-shrink:0; }
+@media(max-width:780px){ .cd-arrow{ transform:rotate(90deg); } }
+
+.juiz { background:rgba(0,255,136,.04); border:1px solid rgba(0,255,136,.22);
+        border-radius:14px; padding:18px 22px; margin:14px 0 20px; }
+.juiz h4 { font-family:'Syne',sans-serif; font-size:1rem; color:var(--green); margin-bottom:10px; }
+.juiz p { color:var(--muted); font-size:.86rem; line-height:1.7; }
+.juiz ol { margin:10px 0 12px 18px; }
+.juiz li { color:var(--muted); font-size:.85rem; line-height:1.65; margin-bottom:8px; }
+.juiz li b, .juiz p b { color:var(--text); }
+.juiz code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3);
+             padding:1px 6px; border-radius:4px; color:var(--text); font-size:.8rem; }
+.juiz .ressalva { border-left:2px solid var(--orange); padding-left:12px; margin-top:12px;
+                  font-size:.83rem; }
+
+.ui-tour { display:flex; flex-direction:column; gap:12px; margin:14px 0 18px; }
+.ui-item { display:flex; gap:14px; background:var(--card); border:1px solid var(--border);
+           border-radius:12px; padding:15px 18px; }
+.ui-n { font-family:'Syne',sans-serif; font-weight:800; font-size:1.1rem; width:32px; height:32px;
+        border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+        background:rgba(0,229,255,.1); border:1px solid var(--border); color:var(--cyan); }
+.ui-item h4 { font-family:'Syne',sans-serif; font-size:.95rem; margin-bottom:6px; }
+.ui-item p { color:var(--muted); font-size:.84rem; line-height:1.65; margin:0; }
+.ui-item p b { color:var(--text); }
+.ui-item code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3);
+                padding:1px 6px; border-radius:4px; color:var(--text); font-size:.78rem; }
+.ui-q { margin-top:8px !important; color:var(--cyan) !important; font-size:.8rem !important; }
+.ui-q i { font-style:italic; opacity:.85; }
+
+.agflow { display:flex; align-items:stretch; gap:10px; flex-wrap:wrap; margin:6px 0 4px; }
+.agnode { flex:1; min-width:140px; border-radius:12px; padding:14px 16px; font-family:'IBM Plex Mono',monospace; font-size:.76rem; text-align:center; background:var(--card); border:1px solid var(--border); color:var(--muted); }
+.agnode .an-name { font-size:.86rem; color:var(--text); display:block; margin-bottom:6px; }
+.agnode.has  { background:rgba(0,255,136,.06); border-color:rgba(0,255,136,.35); } .agnode.has .an-name { color:var(--green); }
+.agnode.hasnt { background:rgba(255,107,53,.05); border-color:rgba(255,107,53,.25); } .agnode.hasnt .an-name { color:var(--orange); }
+@media(prefers-reduced-motion:reduce){ .slide,.fc-item,.badge::before{ transition:none!important; animation:none!important; } }
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+<div id="progress-bar"></div>
+
+<div id="topbar">
+  <span class="tb-label">⬡ MLOps · Aula 1 — Do .pkl para produção</span>
+  <span class="tb-title" id="slide-title-bar"></span>
+  <span class="tb-counter" id="slide-counter"></span>
+</div>
+
+<div id="nav-prev">←</div>
+<div id="nav-next">→</div>
+<div id="dots"></div>
+
+<div id="slides">
+
+<div class="slide" data-title="Abertura">
+<div class="slide-inner slide-scroll">
+
+  <div class="badge">POSTGRES · MLFLOW · FASTAPI</div>
+  <h1 class="hero-title">De um <span style="color:var(--orange)">.pkl</span> na sua pasta<br>para um modelo <span style="color:var(--cyan)">em produção</span>.</h1>
+  <p class="lead" style="max-width:760px;">Você treinou o modelo na Aula 4 e salvou um arquivo. A Marina quer usá-lo amanhã de manhã, todos os dias, sem você por perto. <strong style="color:var(--text)">Esta aula é a distância entre essas duas frases</strong> — e ela não se atravessa retreinando nada.</p>
+  <div class="hero-q">📌 <strong>Três perguntas guiam a aula:</strong> o que falta num <code>.pkl</code> para ele virar produção? Onde cada dado mora — banco do MLflow ou banco da aplicação? E o que acontece no MLflow quando o modelo responde uma pergunta?</div>
+  <div class="pill-row" style="margin-top:22px;">
+    <div class="pill">🧱 8 passos, 3 blocos</div>
+    <div class="pill">🐘 Postgres seu, criado por você</div>
+    <div class="pill">📋 código pronto para copiar</div>
+    <div class="pill">🚫 hoje ninguém retreina</div>
+  </div>
+  <div class="callout co-warn" style="max-width:760px;">
+    <div class="ct">Pré-requisitos</div>
+    <p>O <code>modelo_v1.pkl</code> da Aula 4, Python 3.10+, um <strong style="color:var(--text)">Postgres acessível</strong> (Docker local, instalado na máquina ou na nuvem — a escolha é sua) e o kit descompactado. A pasta chega <strong style="color:var(--text)">pela metade de propósito</strong>: o encanamento vem pronto, as quatro peças que são MLOps você escreve.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Um .pkl não é um modelo em produção">
+<div class="slide-inner slide-scroll">
+
+  <span class="otag">diagnóstico</span>
+  <h2 class="sec-title">Um <span style="color:var(--orange)">.pkl</span> não é um modelo em produção</h2>
+  <p class="lead">O arquivo funciona: você dá <code class="inline">pickle.load</code>, chama <code class="inline">predict</code> e sai um número. Mas ele não responde nenhuma das perguntas que produção faz todo dia.</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <table class="tbl">
+      <thead><tr><th>A pergunta</th><th>O .pkl responde?</th><th>Por quê</th></tr></thead>
+      <tbody>
+        <tr><td>Qual versão está atendendo agora?</td><td><strong style="color:var(--orange)">✕ não</strong></td><td>arquivo não tem número de versão</td></tr>
+        <tr><td>Quais colunas ele espera receber?</td><td><strong style="color:var(--orange)">✕ não</strong></td><td>descobre-se quebrando</td></tr>
+        <tr><td>Ele estava bom quando entrou?</td><td><strong style="color:var(--orange)">✕ não</strong></td><td>a métrica ficou no notebook</td></tr>
+        <tr><td>De qual extração de dado ele saiu?</td><td><strong style="color:var(--orange)">✕ não</strong></td><td>ninguém anotou</td></tr>
+        <tr><td>Em que ambiente ele foi serializado?</td><td><strong style="color:var(--orange)">✕ não</strong></td><td>abra em outra versão do sklearn e veja</td></tr>
+        <tr><td>Como volto para o anterior às 3 da manhã?</td><td><strong style="color:var(--orange)">✕ não</strong></td><td>renomeando arquivo e torcendo</td></tr>
+        <tr><td>Ele calcula uma probabilidade?</td><td><strong style="color:var(--green)">✓ sim</strong></td><td>é a única coisa que ele sabe fazer</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-err">
+    <div class="ct">O modelo está certo — a operação é que não existe</div>
+    <p>Nada aqui se resolve treinando melhor. São perguntas de <strong style="color:var(--text)">operação</strong>, e a resposta para todas é a mesma: o modelo precisa de identidade, contrato e histórico. É isso que você vai construir hoje.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="O que você recebe e o que você escreve">
+<div class="slide-inner slide-scroll">
+
+  <span class="ptag">o kit</span>
+  <h2 class="sec-title">A pasta chega <span style="color:var(--purple)">pela metade</span></h2>
+  <p class="lead">Metade do encanamento está pronto. As quatro peças que <strong style="color:var(--text)">são</strong> MLOps você escreve, e o código de cada uma está nos slides adiante.</p>
+
+  <div class="yn" style="margin-bottom:18px;">
+    <div class="yn-col yn-yes">
+      <h4 style="color:var(--green)">Já está lá</h4>
+      <ul>
+        <li><code style="color:var(--text)">sql/01_criar_tabelas.sql</code> — o DDL das três tabelas</li>
+        <li><code style="color:var(--text)">app/banco.py</code> — as consultas</li>
+        <li><code style="color:var(--text)">app/static/</code> — o front</li>
+        <li><code style="color:var(--text)">treinar_modelo_v1.py</code> — rede de segurança</li>
+        <li><code style="color:var(--text)">dados/features_padronizadas.csv</code> — a Aula 3</li>
+      </ul>
+    </div>
+    <div class="yn-col yn-no" style="background:rgba(124,58,237,.06);border-color:rgba(124,58,237,.3)">
+      <h4 style="color:#c4b5fd">Você escreve hoje</h4>
+      <ul style="list-style:none">
+        <li style="padding-left:20px"><code style="color:var(--text)">config.py</code> — as constantes e a conexão</li>
+        <li style="padding-left:20px"><code style="color:var(--text)">preparar_dados.py</code> — popula o banco</li>
+        <li style="padding-left:20px"><code style="color:var(--text)">onboard_v1.py</code> — adota o .pkl como versão 1</li>
+        <li style="padding-left:20px"><code style="color:var(--text)">app/main.py</code> — a API</li>
+        <li style="padding-left:20px"><code style="color:var(--text)">monitorar.py</code> — mede um lote</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="slide-h3">Os três blocos da aula</h3>
+  <div class="ciclo">
+    <div class="ci-step ci-a"><span class="ci-n">BLOCO A</span><span class="ci-t">Fundação</span>banco, .env, config e os dados dentro do Postgres</div>
+    <div class="ci-step ci-b"><span class="ci-n">BLOCO B</span><span class="ci-t">Registro</span>o MLflow sobe vazio e o modelo ganha identidade</div>
+    <div class="ci-step ci-c"><span class="ci-n">BLOCO C</span><span class="ci-t">Produção</span>a API serve, o front pergunta, o monitor mede</div>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Sobre copiar</div>
+    <p>Copiar o código sem ler funciona e não ensina nada. Cada bloco vem com o porquê, e é o porquê que você vai precisar nas três aulas seguintes — quando algo quebrar e ninguém disser o que foi.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Passo 1 — Seu banco e as tabelas">
+<div class="slide-inner slide-scroll">
+
+  <span class="bloco-mark bl-a">Bloco A · fundação</span>
+  <div class="step-marker">
+    <div class="step-num ">1</div>
+    <div class="step-meta">
+      <span class="step-file">Criar o banco e rodar o DDL</span>
+      <span class="step-obj">Onde o banco vive é escolha sua. As tabelas, não.</span>
+    </div>
+  </div>
+
+  <p class="lead" style="margin-bottom:14px;">Suba um Postgres do jeito que preferir — Docker local, instalado na máquina, ou um serviço na nuvem. Depois crie <strong style="color:var(--text)">dois</strong> bancos e rode o script no primeiro:</p>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">criar os bancos e as tabelas</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">createdb turnover -U postgres
+createdb mlflow   -U postgres
+psql turnover -U postgres -f sql/01_criar_tabelas.sql
+psql turnover -U postgres -c &quot;\\dt&quot;</div>
+</div>
+
+  <div class="callout co-warn" style="margin-bottom:14px;">
+    <div class="ct">O -U postgres não é opcional</div>
+    <p><code>postgres</code> é o superusuário padrão da instalação. Sem <code>-U</code>, o cliente tenta entrar com o seu usuário do sistema operacional, que quase nunca existe dentro do banco. Vale para o <code>createdb</code> e para o <code>psql</code>.</p>
+    <p>Por que <strong style="color:var(--text)">dois</strong> bancos: o <code>turnover</code> é seu, com as três tabelas do script. O <code>mlflow</code> vai ser preenchido sozinho pelo servidor do MLflow no Passo 4 — você só precisa que ele exista, vazio.</p>
+  </div>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">sql/01_criar_tabelas.sql</span>
+    <div class="code-right"><span class="lbadge">já está lá</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code"><span class="c">-- =====================================================================</span>
+<span class="c">-- Turnover RH -- criacao das tabelas da aplicacao</span>
+<span class="c">--</span>
+<span class="c">-- Onde o banco vive e escolha sua: Docker, instalado na maquina ou nuvem.</span>
+<span class="c">-- Rode assim (o -U postgres e obrigatorio: e o superusuario padrao):</span>
+<span class="c">--</span>
+<span class="c">--     createdb turnover -U postgres</span>
+<span class="c">--     createdb mlflow   -U postgres</span>
+<span class="c">--     psql turnover -U postgres -f sql/01_criar_tabelas.sql</span>
+<span class="c">--     psql turnover -U postgres -c &quot;\\dt&quot;</span>
+<span class="c">--</span>
+<span class="c">-- Rodar duas vezes nao quebra nada: e IF NOT EXISTS.</span>
+<span class="c">--</span>
+<span class="c">-- Sao tres tabelas com tres papeis diferentes:</span>
+<span class="c">--   treino_v1            o que o modelo estudou</span>
+<span class="c">--   validacao_congelada  o conjunto de teste, congelado. O modelo nunca viu</span>
+<span class="c">--   predicoes            o que o modelo respondeu em producao</span>
+<span class="c">--</span>
+<span class="c">-- As duas primeiras sao preenchidas pelo preparar_dados.py.</span>
+<span class="c">-- A terceira e preenchida pela API, uma linha por pergunta feita ao modelo.</span>
+<span class="c">-- =====================================================================</span>
+
+<span class="c">-- ------------------------------------------------- o que o modelo viu ----</span>
+CREATE TABLE IF NOT EXISTS treino_v1 (
+    id_pessoa                    TEXT PRIMARY KEY,
+    abs_eventos                  DOUBLE PRECISION NOT NULL DEFAULT 0,
+    abs_qtd_total                DOUBLE PRECISION NOT NULL DEFAULT 0,
+    horas_previstas_total        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    acidentes_eventos            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    acidentes_com_afastamento    DOUBLE PRECISION NOT NULL DEFAULT 0,
+    acidentes_dias_perdidos      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    he_eventos                   DOUBLE PRECISION NOT NULL DEFAULT 0,
+    he_referencia_total          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    he_valor_total               DOUBLE PRECISION NOT NULL DEFAULT 0,
+    hi_eventos                   DOUBLE PRECISION NOT NULL DEFAULT 0,
+    hi_minutos_irregulares       DOUBLE PRECISION NOT NULL DEFAULT 0,
+    hi_minutos_extras            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    mov_sal_eventos              DOUBLE PRECISION NOT NULL DEFAULT 0,
+    mov_sal_valor_total          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    mov_sal_perc_medio           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    pediu_para_sair              SMALLINT NOT NULL
+);
+
+<span class="c">-- ----------------------------- o teste, congelado: o modelo nunca viu ----</span>
+CREATE TABLE IF NOT EXISTS validacao_congelada (
+    id_pessoa                    TEXT PRIMARY KEY,
+    abs_eventos                  DOUBLE PRECISION NOT NULL DEFAULT 0,
+    abs_qtd_total                DOUBLE PRECISION NOT NULL DEFAULT 0,
+    horas_previstas_total        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    acidentes_eventos            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    acidentes_com_afastamento    DOUBLE PRECISION NOT NULL DEFAULT 0,
+    acidentes_dias_perdidos      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    he_eventos                   DOUBLE PRECISION NOT NULL DEFAULT 0,
+    he_referencia_total          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    he_valor_total               DOUBLE PRECISION NOT NULL DEFAULT 0,
+    hi_eventos                   DOUBLE PRECISION NOT NULL DEFAULT 0,
+    hi_minutos_irregulares       DOUBLE PRECISION NOT NULL DEFAULT 0,
+    hi_minutos_extras            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    mov_sal_eventos              DOUBLE PRECISION NOT NULL DEFAULT 0,
+    mov_sal_valor_total          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    mov_sal_perc_medio           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    pediu_para_sair              SMALLINT NOT NULL
+);
+
+<span class="c">-- ------------------------------- o log de producao: quem respondeu o que ----</span>
+CREATE TABLE IF NOT EXISTS predicoes (
+    id             BIGSERIAL PRIMARY KEY,
+    criado_em      TIMESTAMPTZ      NOT NULL DEFAULT now(),
+    lote           TEXT             NOT NULL,   -- &#x27;avulso&#x27; ou o nome do csv
+    id_pessoa      TEXT,
+    versao_modelo  TEXT             NOT NULL,   -- QUAL versao respondeu
+    probabilidade  DOUBLE PRECISION NOT NULL,
+    classe         SMALLINT         NOT NULL,
+    features       JSONB            NOT NULL    -- a entrada exata recebida
+);
+
+CREATE INDEX IF NOT EXISTS idx_predicoes_lote      ON predicoes (lote);
+CREATE INDEX IF NOT EXISTS idx_predicoes_criado_em ON predicoes (criado_em DESC);
+
+
+<span class="c">-- =====================================================================</span>
+<span class="c">-- Para recomecar do zero, descomente e rode:</span>
+<span class="c">--</span>
+<span class="c">-- DROP TABLE IF EXISTS treino_v1, validacao_congelada, predicoes;</span>
+<span class="c">-- =====================================================================</span></div>
+</div>
+
+  <h3 class="slide-h3">Três tabelas, três papéis</h3>
+  <div class="g3" style="margin-bottom:16px;">
+    <div class="card"><strong style="color:var(--cyan);font-size:.86rem">treino_v1</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">o que o modelo estudou</p></div>
+    <div class="card"><strong style="color:var(--green);font-size:.86rem">validacao_congelada</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">o conjunto de teste — o modelo nunca viu</p></div>
+    <div class="card"><strong style="color:var(--orange);font-size:.86rem">predicoes</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">o que ele respondeu em produção</p></div>
+  </div>
+
+  <div class="juiz">
+    <h4>Sim — <code>validacao_congelada</code> é o seu conjunto de teste</h4>
+    <p>É o mesmo <code>X_test</code> da Aula 4. O que muda é que agora ele tem nome, endereço fixo e um papel na operação, não só no notebook. Três coisas justificam isso:</p>
+    <ol>
+      <li><b>O modelo nunca vê essas linhas.</b> Medir no que ele estudou é como corrigir a prova com o gabarito que o aluno escreveu. O número sai alto e não significa nada.</li>
+      <li><b>"Congelada" é a palavra que carrega o peso.</b> Ela não muda de uma aula para a outra. Quando a v2 aparecer na Aula 2, o F1 dela vai ser medido <u>exatamente nas mesmas 4.800 pessoas</u> — comparar em conjuntos diferentes é a forma mais comum de promover um modelo pior sem perceber.</li>
+      <li><b>É ela que vira o baseline no MLflow.</b> As métricas que o Passo 5 registra saem daqui. Sem esse número gravado, "o modelo piorou" é opinião.</li>
+    </ol>
+    <p class="ressalva">Guarde duas ressalvas para a Aula 2. Um conjunto de teste usado muitas vezes para <i>escolher</i> entre modelos vai deixando de ser cego — cada decisão tomada olhando para ele vaza um pouco de informação. E se a população mudar, <b>o juiz envelhece junto</b>: julgar um modelo feito para o mundo novo com o teste do mundo velho reprova exatamente os modelos que você precisa promover.</p>
+  </div>
+
+  <h3 class="slide-h3">Agora o .env, com o SEU endereço</h3>
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">conexão</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">cp .env.exemplo .env    # e edite com os seus dados</div>
+</div>
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">.env.exemplo</span>
+    <div class="code-right"><span class="lbadge">já está lá</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code"><span class="c"># Copie para .env e ajuste para o SEU banco.</span>
+<span class="c"># O .env nao vai para o git -- e por isso que a senha mora aqui e nao no codigo.</span>
+PG_HOST=127.0.0.1
+PG_PORT=5432
+PG_USER=turnover
+PG_SENHA=turnover
+PG_DB_APP=turnover
+PG_DB_MLFLOW=mlflow
+
+<span class="c"># Endereco do servidor MLflow (o que voce sobe no terminal 1)</span>
+MLFLOW_URI=http://127.0.0.1:5000</div>
+</div>
+
+  <div class="callout co-warn">
+    <div class="ct">Duas coisas de propósito aqui</div>
+    <p>A senha mora no <code>.env</code>, que está no <code>.gitignore</code> — nunca no código. E a <strong style="color:var(--text)">aplicação não cria tabela</strong>: quem roda o DDL é você. DDL escondido dentro do app é um ótimo jeito de descobrir tarde demais que a forma da produção mudou.</p>
+    <p>O script é <code>IF NOT EXISTS</code> do começo ao fim: rodar de novo não quebra nada, só imprime avisos de "já existe". Para zerar tudo, o <code>DROP</code> está comentado no rodapé.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Passo 2 — config.py">
+<div class="slide-inner slide-scroll">
+
+  <span class="bloco-mark bl-a">Bloco A · fundação</span>
+  <div class="step-marker">
+    <div class="step-num ">2</div>
+    <div class="step-meta">
+      <span class="step-file">config.py</span>
+      <span class="step-obj">As constantes que todo o resto importa — inclusive a conexão.</span>
+    </div>
+  </div>
+
+  <p class="lead" style="margin-bottom:14px;">Vem <strong style="color:var(--text)">antes</strong> do script que popula o banco, porque é ele que lê o <code class="inline">.env</code> e monta a string de conexão. Sem config, nada mais roda.</p>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">config.py</span>
+    <div class="code-right"><span class="lbadge">voce cria</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code"><span class="s">&quot;&quot;&quot;
+Constantes compartilhadas por toda a aplicacao.
+
+Regra da disciplina: nenhum destes valores aparece escrito no meio do codigo.
+Se voce vir &quot;champion&quot; digitado dentro do main.py, alguem quebrou a regra.
+&quot;&quot;&quot;</span>
+<span class="k">import</span> os
+<span class="k">from</span> pathlib <span class="k">import</span> Path
+
+<span class="k">from</span> dotenv <span class="k">import</span> load_dotenv
+
+RAIZ = Path(__file__).resolve().parent
+load_dotenv(RAIZ / <span class="s">&quot;.env&quot;</span>)
+
+<span class="c"># -------------------------------------------------------------- Postgres ----</span>
+<span class="c"># Um servidor Postgres, dois bancos: o seu (turnover) e o do MLflow.</span>
+<span class="c"># Onde o servidor vive e escolha sua -- Docker, local ou nuvem.</span>
+<span class="c"># Senha em variavel de ambiente, nao no codigo -- ver .env.exemplo.</span>
+PG_HOST = os.getenv(<span class="s">&quot;PG_HOST&quot;</span>, <span class="s">&quot;127.0.0.1&quot;</span>)
+PG_PORT = os.getenv(<span class="s">&quot;PG_PORT&quot;</span>, <span class="s">&quot;5432&quot;</span>)
+PG_USER = os.getenv(<span class="s">&quot;PG_USER&quot;</span>, <span class="s">&quot;turnover&quot;</span>)
+PG_SENHA = os.getenv(<span class="s">&quot;PG_SENHA&quot;</span>, <span class="s">&quot;turnover&quot;</span>)
+PG_DB_MLFLOW = os.getenv(<span class="s">&quot;PG_DB_MLFLOW&quot;</span>, <span class="s">&quot;mlflow&quot;</span>)
+PG_DB_APP = os.getenv(<span class="s">&quot;PG_DB_APP&quot;</span>, <span class="s">&quot;turnover&quot;</span>)
+
+
+<span class="k">def</span> <span class="h">uri_postgres</span>(banco):
+    <span class="k">return</span> f&quot;postgresql://{PG_USER}:{PG_SENHA}@{PG_HOST}:{PG_PORT}/{banco}&quot;
+
+
+<span class="c"># Onde o MLflow guarda runs, metricas e o catalogo de versoes.</span>
+<span class="c"># E este endereco que voce passa no --backend-store-uri ao subir o servidor.</span>
+URI_BANCO_MLFLOW = uri_postgres(PG_DB_MLFLOW)
+
+<span class="c"># Onde a aplicacao guarda o log de predicoes. Banco separado, de proposito.</span>
+URI_BANCO_APP = uri_postgres(PG_DB_APP)
+
+<span class="c"># ---------------------------------------------------------------- MLflow ----</span>
+<span class="c"># Onde o MLflow guarda runs, metricas e versoes de modelo.</span>
+<span class="c"># E o endereco do servidor que voce sobe no terminal 1.</span>
+URI_TRACKING = os.getenv(<span class="s">&quot;MLFLOW_URI&quot;</span>, <span class="s">&quot;http://127.0.0.1:5000&quot;</span>)
+
+<span class="c"># Um experimento agrupa runs que respondem a mesma pergunta.</span>
+<span class="c"># Todos os treinos e monitoramentos do turnover caem aqui dentro.</span>
+NOME_EXPERIMENTO = <span class="s">&quot;turnover_rh&quot;</span>
+
+<span class="c"># Nome do modelo dentro do Model Registry (o catalogo de versoes).</span>
+<span class="c"># E o &quot;turnover_rh&quot; que aparece em models:/turnover_rh@champion</span>
+NOME_MODELO = <span class="s">&quot;turnover_rh&quot;</span>
+
+<span class="c"># ALIAS = um apelido movel que aponta para UMA versao do modelo.</span>
+<span class="c"># Promover = mover o apelido. A aplicacao nunca sabe o numero da versao.</span>
+ALIAS_PROD = <span class="s">&quot;champion&quot;</span>       <span class="c"># o que esta atendendo producao agora</span>
+ALIAS_CANDIDATO = <span class="s">&quot;challenger&quot;</span>  <span class="c"># candidato esperando aprovacao (usado da Aula 2 em diante)</span>
+
+<span class="c"># ------------------------------------------------------------ Aplicacao ----</span>
+PASTA_ARTEFATOS = RAIZ / <span class="s">&quot;artefatos&quot;</span>
+PASTA_DADOS = RAIZ / <span class="s">&quot;dados&quot;</span>
+PASTA_RELATORIOS = RAIZ / <span class="s">&quot;relatorios&quot;</span>
+
+<span class="c"># ---------------------------------------------------------------- Modelo ----</span>
+COLUNA_ID = <span class="s">&quot;id_pessoa&quot;</span>
+COLUNA_ALVO = <span class="s">&quot;pediu_para_sair&quot;</span>
+
+<span class="c"># O contrato de entrada da v1: 15 features comportamentais, nesta ordem.</span>
+<span class="c"># A ordem importa: e ela que vira a signature registrada no MLflow.</span>
+FEATURES = [
+    <span class="s">&quot;abs_eventos&quot;</span>,
+    <span class="s">&quot;abs_qtd_total&quot;</span>,
+    <span class="s">&quot;horas_previstas_total&quot;</span>,
+    <span class="s">&quot;acidentes_eventos&quot;</span>,
+    <span class="s">&quot;acidentes_com_afastamento&quot;</span>,
+    <span class="s">&quot;acidentes_dias_perdidos&quot;</span>,
+    <span class="s">&quot;he_eventos&quot;</span>,
+    <span class="s">&quot;he_referencia_total&quot;</span>,
+    <span class="s">&quot;he_valor_total&quot;</span>,
+    <span class="s">&quot;hi_eventos&quot;</span>,
+    <span class="s">&quot;hi_minutos_irregulares&quot;</span>,
+    <span class="s">&quot;hi_minutos_extras&quot;</span>,
+    <span class="s">&quot;mov_sal_eventos&quot;</span>,
+    <span class="s">&quot;mov_sal_valor_total&quot;</span>,
+    <span class="s">&quot;mov_sal_perc_medio&quot;</span>,
+]
+
+<span class="c"># Acima disso, o colaborador entra na lista de risco.</span>
+<span class="c"># 0.5 e o default de qualquer classificador -- mas e uma decisao DE NEGOCIO,</span>
+<span class="c"># nao uma constante da matematica. Marina pode querer 0.7.</span>
+LIMIAR_DECISAO = <span class="o">0.5</span>
+
+<span class="c"># As cores do card no front. Repare que a primeira faixa termina exatamente</span>
+<span class="c"># no LIMIAR_DECISAO: verde e, literalmente, &quot;classe 0&quot;.</span>
+<span class="c">#   ate 50%   ok        verde</span>
+<span class="c">#   50 a 60%  atencao   amarelo</span>
+<span class="c">#   acima 60% alerta    vermelho</span>
+FAIXA_ATENCAO = <span class="o">0.50</span>
+FAIXA_ALERTA = <span class="o">0.60</span>
+
+<span class="c"># Nomes das tabelas (o DDL esta em sql/01_criar_tabelas.sql)</span>
+TABELA_TREINO = <span class="s">&quot;treino_v1&quot;</span>
+TABELA_VALIDACAO = <span class="s">&quot;validacao_congelada&quot;</span>
+TABELA_PREDICOES = <span class="s">&quot;predicoes&quot;</span>
+
+<span class="c"># Semente unica de toda a disciplina. E o que faz a turma inteira ver os</span>
+<span class="c"># mesmos numeros nas quatro aulas.</span>
+SEED = <span class="o">42</span>
+
+
+<span class="c"># ------------------------------------------------------------- utilidade ----</span>
+<span class="c"># O servidor do MLflow e um processo separado: ele NAO le o seu .env.</span>
+<span class="c"># A conexao com o banco vai na linha de comando. Para nao digitar a senha</span>
+<span class="c"># duas vezes (e errar), rode `python config.py` e copie o comando pronto.</span>
+<span class="k">if</span> __name__ == <span class="s">&quot;__main__&quot;</span>:
+    <span class="o">print</span>(<span class="s">&quot;python -m mlflow server&quot;</span>
+          <span class="s">&quot; --host 127.0.0.1&quot;</span>
+          <span class="s">&quot; --port 5000&quot;</span>
+          f&quot; --backend-store-uri {URI_BANCO_MLFLOW}&quot;
+          <span class="s">&quot; --default-artifact-root ./mlruns&quot;</span>)</div>
+</div>
+
+  <div class="callout co-warn" style="margin-bottom:12px;">
+    <div class="ct">A regra que vale para as quatro aulas</div>
+    <p>Se <code>"champion"</code> aparecer digitado dentro do <code>main.py</code>, você tem a mesma decisão escrita em dois lugares. No dia em que ela mudar, um dos dois fica para trás e ninguém percebe até a produção responder errado. <strong style="color:var(--text)">Um único lugar por decisão.</strong></p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Três decisões de negócio disfarçadas de constante</div>
+    <p><code>LIMIAR_DECISAO = 0.5</code> é onde o modelo separa classe 0 de classe 1. <code>FAIXA_ATENCAO</code> e <code>FAIXA_ALERTA</code> são as cores do card no front. Repare que a primeira faixa <strong style="color:var(--text)">termina exatamente no limiar</strong> — verde é, literalmente, "classe 0". Nada disso é matemática: é a Marina que decide, e por isso mora aqui e não dentro do modelo.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Passo 3 — preparar_dados.py">
+<div class="slide-inner slide-scroll">
+
+  <span class="bloco-mark bl-a">Bloco A · fundação</span>
+  <div class="step-marker">
+    <div class="step-num ">3</div>
+    <div class="step-meta">
+      <span class="step-file">preparar_dados.py</span>
+      <span class="step-obj">Levar a tabela da Aula 3 para dentro do seu Postgres.</span>
+    </div>
+  </div>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">preparar_dados.py</span>
+    <div class="code-right"><span class="lbadge">voce cria</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code"><span class="s">&quot;&quot;&quot;
+Popula o banco com os dois conjuntos do modelo.
+
+Le a tabela que voces montaram na Aula 3 e grava, dentro do SEU Postgres,
+um split 80/20:
+
+    treino_v1            19.200  o que o modelo estuda
+    validacao_congelada   4.800  o juiz. O modelo nunca ve estas linhas
+
+As tabelas ja tem que existir. Se nao existirem, rode antes:
+    psql &lt;seu_banco&gt; -U postgres -f sql/01_criar_tabelas.sql
+
+Os lotes mensais NAO saem daqui. Cada aula recebe um arquivo novo, com
+pessoas novas -- como o RH mandaria de verdade.
+&quot;&quot;&quot;</span>
+<span class="k">import</span> pandas <span class="k">as</span> pd
+<span class="k">from</span> sklearn.model_selection <span class="k">import</span> train_test_split
+
+<span class="k">import</span> config
+<span class="k">from</span> app <span class="k">import</span> banco
+
+ORIGEM = config.PASTA_DADOS / <span class="s">&quot;features_padronizadas.csv&quot;</span>
+PROPORCAO_TESTE = <span class="o">0.20</span>
+
+
+<span class="k">def</span> <span class="h">carregar_origem</span>():
+    <span class="k">return</span> pd.read_csv(ORIGEM, sep=<span class="s">&quot;;&quot;</span>).rename(
+        columns={<span class="s">&quot;nIdPessoa&quot;</span>: config.COLUNA_ID})
+
+
+<span class="k">def</span> <span class="h">dividir</span>(df=<span class="k">None</span>):
+    <span class="s">&quot;&quot;&quot;Split 80/20 estratificado pelo alvo, com semente fixa.
+
+    Estratificado significa que as duas metades tem a mesma proporcao de
+    quem pediu demissao. Sem isso, o acaso poderia deixar a validacao com
+    mais desligamentos que o treino e o F1 sairia distorcido.
+    &quot;&quot;&quot;</span>
+    <span class="k">if</span> df <span class="k">is</span> <span class="k">None</span>:
+        df = carregar_origem()
+    treino, validacao = train_test_split(
+        df, test_size=PROPORCAO_TESTE, random_state=config.SEED,
+        stratify=df[config.COLUNA_ALVO])
+    <span class="k">return</span> treino, validacao
+
+
+<span class="k">def</span> <span class="h">main</span>():
+    banco.conferir()
+
+    df = carregar_origem()
+    <span class="o">print</span>(f&quot;origem: {<span class="o">len</span>(df)} linhas, alvo em {df[config.COLUNA_ALVO].mean():.1%}&quot;)
+
+    treino, validacao = dividir(df)
+    n_t = banco.gravar_conjunto(config.TABELA_TREINO, treino)
+    n_v = banco.gravar_conjunto(config.TABELA_VALIDACAO, validacao)
+
+    <span class="o">print</span>(f&quot;treino_v1            {n_t:&gt;6} linhas  ({<span class="o">1</span>-PROPORCAO_TESTE:.0%})&quot;)
+    <span class="o">print</span>(f&quot;validacao_congelada  {n_v:&gt;6} linhas  ({PROPORCAO_TESTE:.0%})&quot;)
+    <span class="o">print</span>(f&quot;  alvo no treino    {treino[config.COLUNA_ALVO].mean():.1%}&quot;)
+    <span class="o">print</span>(f&quot;  alvo na validacao {validacao[config.COLUNA_ALVO].mean():.1%}&quot;)
+    <span class="o">print</span>(<span class="s">&quot;\nconfira:  SELECT count(*) FROM treino_v1;&quot;</span>)
+
+
+<span class="k">if</span> __name__ == <span class="s">&quot;__main__&quot;</span>:
+    main()</div>
+</div>
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">rodar</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">python preparar_dados.py</div>
+</div>
+
+  <div class="g2" style="margin:14px 0;">
+    <div class="card"><span class="tag">19.200 · 80%</span><strong style="font-size:.9rem">treino_v1</strong><p style="color:var(--muted);font-size:.8rem;margin-top:4px">o que a v1 estudou</p></div>
+    <div class="card"><span class="gtag">4.800 · 20%</span><strong style="font-size:.9rem">validacao_congelada</strong><p style="color:var(--muted);font-size:.8rem;margin-top:4px">o juiz — o modelo nunca viu</p></div>
+  </div>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">confira</span>
+    <div class="code-right"><span class="lbadge">tem que dar 19200</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">psql turnover -U postgres -c &quot;SELECT count(*) FROM treino_v1;&quot;</div>
+</div>
+
+  <div class="callout co-info" style="margin-bottom:12px;">
+    <div class="ct">Estratificado, e por quê</div>
+    <p>O corte mantém a mesma proporção de quem pediu demissão nos dois lados: <strong style="color:var(--text)">51,4% aqui e 51,4% ali</strong>. Sem isso, o acaso poderia deixar a validação mais desbalanceada que o treino, e o F1 sairia distorcido sem que ninguém soubesse por quê.</p>
+  </div>
+
+  <div class="callout co-ok" style="margin-bottom:12px;">
+    <div class="ct">A base inteira virou treino e teste. E os lotes?</div>
+    <p>Chegam de fora, um arquivo por aula, com <strong style="color:var(--text)">pessoas que não estão nesta tabela</strong> — como o RH mandaria de verdade. Não tem reserva escondida: as 24.000 são o histórico que você usou para construir o modelo, e o futuro chega depois.</p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Agora o .pkl</div>
+    <p>Coloque o <code>modelo_v1.pkl</code> da Aula 4 em <code>artefatos/</code>. Se ele não aceitar exatamente as 15 features de <code>config.FEATURES</code>, o Passo 5 vai recusar com a lista do que falta — aí rode <code>python treinar_modelo_v1.py</code>, que treina o equivalente lendo direto do banco. É o <strong style="color:var(--text)">único arquivo da disciplina que chama <code>.fit()</code></strong>.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Passo 4 — Subir o MLflow (vazio)">
+<div class="slide-inner slide-scroll">
+
+  <span class="bloco-mark bl-b">Bloco B · registro</span>
+  <div class="step-marker">
+    <div class="step-num b">4</div>
+    <div class="step-meta">
+      <span class="step-file">mlflow server</span>
+      <span class="step-obj">Um processo separado. Nenhuma linha do seu código o inicia.</span>
+    </div>
+  </div>
+
+  <p class="lead" style="margin-bottom:14px;">O MLflow <strong style="color:var(--text)">não é uma biblioteca que você importa e sobe</strong>. É um serviço, como o Postgres: você liga pelo terminal e ele fica lá. Nada no projeto configura ou inicia esse servidor — a única coisa que liga os dois mundos é a linha <code class="inline">mlflow.set_tracking_uri(...)</code> que você acabou de escrever no config.</p>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal 1 — MLflow</span>
+    <div class="code-right"><span class="lbadge">deixar aberto</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">python -m mlflow server --host 127.0.0.1 --port 5000 --backend-store-uri postgresql://turnover:turnover@127.0.0.1:5432/mlflow --default-artifact-root ./mlruns</div>
+</div>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:14px;">
+    <table class="tbl">
+      <thead><tr><th>Argumento</th><th>Para quê</th></tr></thead>
+      <tbody>
+        <tr><td><code>--host 127.0.0.1</code></td><td>em qual interface de rede escutar. <code>127.0.0.1</code> = só a sua máquina. Se fosse <code>0.0.0.0</code>, qualquer um na rede alcançaria o servidor</td></tr>
+        <tr><td><code>--port 5000</code></td><td>a porta. Se já estiver ocupada (no macOS o AirPlay usa a 5000), troque para 5001 e ajuste o <code>MLFLOW_URI</code> no <code>.env</code></td></tr>
+        <tr><td><code>--backend-store-uri</code></td><td>onde gravar runs, params, metrics, tags e o catálogo de versões. É o banco <code>mlflow</code> que você criou vazio no Passo 1 — o MLflow monta as 19 tabelas sozinho na primeira subida</td></tr>
+        <tr><td><code>--default-artifact-root</code></td><td>onde gravar os <strong>arquivos</strong>: o modelo serializado, a signature, os relatórios. Aqui é a pasta local <code>./mlruns</code>; numa empresa seria S3 ou MinIO</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-err" style="margin-bottom:14px;">
+    <div class="ct">Erro de senha aqui? O MLflow não lê o seu .env</div>
+    <p>O <code>.env</code> só é lido pelo <strong style="color:var(--text)">seu</strong> código Python, através do <code>config.py</code>. O servidor do MLflow é um processo separado e recebe a conexão pela linha de comando — se o seu usuário não for <code>turnover</code>, o comando acima falha com <code>password authentication failed</code>.</p>
+    <p>Para não digitar a senha duas vezes e errar, gere o comando já com os seus dados:</p>
+  </div>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">gera o comando pronto</span>
+    <div class="code-right"><span class="lbadge">copie a saída</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">python config.py</div>
+</div>
+
+  <div class="callout co-warn" style="margin-bottom:14px;">
+    <div class="ct">Sobre o python -m</div>
+    <p>Se você instalou por <code>pip</code>, o executável <code>mlflow</code> pode não estar no PATH — o sintoma é <code>command not found</code> mesmo com o pacote instalado. <code>python -m mlflow</code> chama o mesmo programa pelo interpretador que você está usando, e funciona sempre.</p>
+    <p>A linha <code>Registry store URI not provided. Using backend store URI</code> não é erro: o registry de modelos pode viver num banco separado do de experimentos, e quando você não separa, ele usa o mesmo. É o que queremos.</p>
+  </div>
+
+  <div class="test-box">
+    <div class="tt">🔍 Olhe o vazio antes de ter alguma coisa</div>
+    <ol>
+      <li>Abra <code>127.0.0.1:5000</code> — a interface sobe sem nenhum experimento</li>
+      <li>Agora olhe o banco: <code>psql -d mlflow -c "\dt"</code></li>
+      <li>Ele criou <strong>19 tabelas sozinho</strong>, todas vazias</li>
+      <li>Guarde essa tela. Daqui a dois passos você volta para comparar</li>
+    </ol>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Repare no --backend-store-uri</div>
+    <p>Você apontou o MLflow para um banco <strong style="color:var(--text)">diferente</strong> do da aplicação. Mesmo servidor Postgres, bancos separados. O próximo slide de teoria é só sobre por que isso importa.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Passo 5 — onboard_v1.py">
+<div class="slide-inner slide-scroll">
+
+  <span class="bloco-mark bl-b">Bloco B · registro</span>
+  <div class="step-marker">
+    <div class="step-num b">5</div>
+    <div class="step-meta">
+      <span class="step-file">onboard_v1.py</span>
+      <span class="step-obj">O coração da aula. Adota o .pkl como versão 1 do modelo.</span>
+    </div>
+  </div>
+
+  <p class="lead" style="margin-bottom:14px;">Procure um <code class="inline">.fit()</code> aqui dentro: não tem. Este script <strong style="color:var(--text)">não treina nada</strong>. Ele acrescenta ao arquivo solto as três coisas que faltavam:</p>
+
+  <div class="g3" style="margin-bottom:16px;">
+    <div class="card"><strong style="color:var(--cyan);font-size:.9rem">identidade</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">número de versão + alias</p></div>
+    <div class="card"><strong style="color:var(--cyan);font-size:.9rem">contrato</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">signature: quais colunas, de que tipo, em que ordem</p></div>
+    <div class="card"><strong style="color:var(--cyan);font-size:.9rem">baseline</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">métricas na validação congelada</p></div>
+  </div>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">onboard_v1.py</span>
+    <div class="code-right"><span class="lbadge">voce cria</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code"><span class="s">&quot;&quot;&quot;
+Adota um .pkl que ja existe como versao 1 do modelo no MLflow.
+
+NAO TREINA NADA. Procure um .fit() aqui dentro: nao tem.
+O que este script adiciona ao arquivo solto sao tres coisas que ele nao tinha:
+
+    identidade  -&gt; numero de versao + alias @champion
+    contrato    -&gt; signature (quais colunas, de que tipo, em que ordem)
+    baseline    -&gt; metricas recalculadas na validacao congelada
+
+Uso:
+    python onboard_v1.py --pkl artefatos/modelo_v1.pkl
+&quot;&quot;&quot;</span>
+<span class="k">import</span> argparse
+<span class="k">import</span> pickle
+
+<span class="k">import</span> mlflow
+<span class="k">import</span> pandas <span class="k">as</span> pd
+<span class="k">from</span> mlflow.models <span class="k">import</span> infer_signature
+<span class="k">from</span> mlflow.tracking <span class="k">import</span> MlflowClient
+<span class="k">from</span> sklearn.metrics <span class="k">import</span> accuracy_score, f1_score, precision_score, recall_score
+
+<span class="k">import</span> config
+<span class="k">from</span> app <span class="k">import</span> banco
+
+
+<span class="k">def</span> <span class="h">conferir_contrato</span>(modelo):
+    <span class="s">&quot;&quot;&quot;O pkl da Aula 4 aceita as 15 features padronizadas?&quot;&quot;&quot;</span>
+    esperado = <span class="o">list</span>(config.FEATURES)
+    recebido = <span class="o">list</span>(<span class="o">getattr</span>(modelo, <span class="s">&quot;feature_names_in_&quot;</span>, esperado))
+    <span class="k">if</span> recebido != esperado:
+        faltando = [c <span class="k">for</span> c <span class="k">in</span> esperado <span class="k">if</span> c <span class="k">not</span> <span class="k">in</span> recebido]
+        sobrando = [c <span class="k">for</span> c <span class="k">in</span> recebido <span class="k">if</span> c <span class="k">not</span> <span class="k">in</span> esperado]
+        <span class="k">raise</span> <span class="o">SystemExit</span>(
+            <span class="s">&quot;Seu modelo nao fala a mesma lingua que config.FEATURES.\n&quot;</span>
+            f&quot;  faltando: {faltando}\n&quot;
+            f&quot;  sobrando: {sobrando}\n&quot;
+            <span class="s">&quot;Rode `python treinar_modelo_v1.py` para gerar o pkl padronizado.&quot;</span>)
+
+
+<span class="k">def</span> <span class="h">main</span>():
+    ap = argparse.ArgumentParser()
+    ap.add_argument(<span class="s">&quot;--pkl&quot;</span>, default=<span class="o">str</span>(config.PASTA_ARTEFATOS / <span class="s">&quot;modelo_v1.pkl&quot;</span>))
+    args = ap.parse_args()
+
+    <span class="k">with</span> <span class="o">open</span>(args.pkl, <span class="s">&quot;rb&quot;</span>) <span class="k">as</span> f:
+        modelo = pickle.load(f)
+    conferir_contrato(modelo)
+
+    <span class="c"># A validacao congelada e o juiz oficial da v1. O modelo nunca a viu.</span>
+    banco.conferir()
+    validacao = banco.carregar_conjunto(config.TABELA_VALIDACAO)
+    X = validacao[config.FEATURES]
+    y = validacao[config.COLUNA_ALVO]
+
+    <span class="c"># Isto aqui e `predict`, nao `fit`. Estamos medindo, nao aprendendo.</span>
+    y_pred = modelo.predict(X)
+    metricas = {
+        <span class="s">&quot;accuracy&quot;</span>: accuracy_score(y, y_pred),
+        <span class="s">&quot;f1&quot;</span>: f1_score(y, y_pred),
+        <span class="s">&quot;precision&quot;</span>: precision_score(y, y_pred),
+        <span class="s">&quot;recall&quot;</span>: recall_score(y, y_pred),
+        <span class="s">&quot;taxa_predicao_positiva&quot;</span>: <span class="o">float</span>(y_pred.mean()),
+    }
+
+    mlflow.set_tracking_uri(config.URI_TRACKING)
+    mlflow.set_experiment(config.NOME_EXPERIMENTO)
+
+    <span class="k">with</span> mlflow.start_run(run_name=<span class="s">&quot;v1_onboarding_do_pkl&quot;</span>) <span class="k">as</span> run:
+        <span class="c"># Tags = etiquetas para filtrar runs depois. Estas duas sao uma</span>
+        <span class="c"># confissao honesta: este modelo nasceu fora do MLflow.</span>
+        mlflow.set_tags({
+            <span class="s">&quot;tipo&quot;</span>: <span class="s">&quot;onboarding&quot;</span>,
+            <span class="s">&quot;origem&quot;</span>: <span class="s">&quot;pre_mlflow&quot;</span>,
+            <span class="s">&quot;lineage&quot;</span>: <span class="s">&quot;incompleto&quot;</span>,
+            <span class="s">&quot;arquivo_origem&quot;</span>: args.pkl,
+        })
+
+        <span class="c"># Lineage possivel: apontamos o dataset a mao. Ninguem garante que</span>
+        <span class="c"># foi ESTE arquivo que gerou o pkl -- e esse e o ponto da aula.</span>
+        treino = banco.carregar_conjunto(config.TABELA_TREINO)
+        mlflow.log_input(
+            mlflow.data.from_pandas(treino, name=config.TABELA_TREINO,
+                                    targets=config.COLUNA_ALVO),
+            context=<span class="s">&quot;training&quot;</span>)
+
+        <span class="c"># Params: entrada do treino. Sairam do objeto sklearn, que ainda</span>
+        <span class="c"># carrega os hiperparametros consigo.</span>
+        mlflow.log_params({
+            <span class="s">&quot;tipo_modelo&quot;</span>: <span class="o">type</span>(modelo).__name__,
+            <span class="s">&quot;n_features&quot;</span>: <span class="o">len</span>(config.FEATURES),
+            **{k: v <span class="k">for</span> k, v <span class="k">in</span> modelo.get_params().items()
+               <span class="k">if</span> k <span class="k">in</span> (<span class="s">&quot;n_estimators&quot;</span>, <span class="s">&quot;max_depth&quot;</span>, <span class="s">&quot;random_state&quot;</span>, <span class="s">&quot;criterion&quot;</span>)},
+        })
+
+        <span class="c"># Metrics: saida da medicao.</span>
+        mlflow.log_metrics(metricas)
+
+        assinatura = infer_signature(X, y_pred)
+        mlflow.sklearn.log_model(
+            sk_model=modelo,
+            artifact_path=<span class="s">&quot;modelo&quot;</span>,
+            signature=assinatura,
+            input_example=X.head(<span class="o">3</span>),
+            registered_model_name=config.NOME_MODELO,
+        )
+        run_id = run.info.run_id
+
+    cliente = MlflowClient()
+    versao = <span class="o">max</span>(
+        (v <span class="k">for</span> v <span class="k">in</span> cliente.search_model_versions(f&quot;name=&#x27;{config.NOME_MODELO}&#x27;&quot;)),
+        key=<span class="k">lambda</span> v: <span class="o">int</span>(v.version))
+    cliente.set_registered_model_alias(
+        config.NOME_MODELO, config.ALIAS_PROD, versao.version)
+    cliente.set_model_version_tag(
+        config.NOME_MODELO, versao.version, <span class="s">&quot;validado_em&quot;</span>, <span class="s">&quot;validacao_congelada&quot;</span>)
+
+    <span class="o">print</span>(f&quot;\nrun_id  {run_id}&quot;)
+    <span class="o">print</span>(f&quot;versao  {versao.version}  -&gt;  @{config.ALIAS_PROD}&quot;)
+    <span class="o">print</span>(<span class="s">&quot;\nbaseline na validacao congelada:&quot;</span>)
+    <span class="k">for</span> k, v <span class="k">in</span> metricas.items():
+        <span class="o">print</span>(f&quot;  {k:&lt;24} {v:.4f}&quot;)
+    <span class="o">print</span>(f&quot;\nA producao agora resolve models:/{config.NOME_MODELO}&quot;
+          f&quot;@{config.ALIAS_PROD} para a versao {versao.version}.&quot;)
+
+
+<span class="k">if</span> __name__ == <span class="s">&quot;__main__&quot;</span>:
+    main()</div>
+</div>
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">rodar</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">python onboard_v1.py --pkl artefatos/modelo_v1.pkl</div>
+</div>
+
+  <div class="callout co-warn">
+    <div class="ct">Medir não é treinar</div>
+    <p>A linha <code>modelo.predict(X)</code> no meio do script é medição. O baseline sai de aplicar o modelo pronto na <code>validacao_congelada</code> — que ele nunca viu, e que agora vem do banco, não de um CSV.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="As funções do MLflow — onde escrever">
+<div class="slide-inner slide-scroll">
+
+  <span class="tag">teoria</span>
+  <h2 class="sec-title">As funções do MLflow <span style="color:var(--cyan)">— parte 1</span></h2>
+  <p class="lead">As três que preparam o terreno. Todas aparecem no <code class="inline">onboard_v1.py</code> que você acabou de escrever.</p>
+
+  <div class="card" style="margin-bottom:14px;">
+    <h3 class="slide-h3" style="color:var(--green);font-family:'IBM Plex Mono',monospace;font-size:.95rem;">mlflow.set_tracking_uri(uri)</h3>
+    <p style="color:var(--muted);font-size:.86rem;line-height:1.7;">Diz <strong style="color:var(--text)">para onde</strong> mandar tudo. É um estado global do processo: depois dessa chamada, toda função <code style="color:var(--text)">mlflow.*</code> vai falar com aquele servidor.</p>
+    <p style="color:var(--muted);font-size:.86rem;line-height:1.7;margin-top:8px;">Sem ela, o MLflow não reclama — ele silenciosamente grava numa pasta <code style="color:var(--text)">./mlruns</code> local. O sintoma é sempre o mesmo: <strong style="color:var(--text)">"rodou, não deu erro e não apareceu na tela"</strong>. Se acontecer com você, procure uma pasta <code style="color:var(--text)">mlruns</code> nova no diretório de onde você rodou o script — os seus dados estão lá, no lugar errado.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <h3 class="slide-h3" style="color:var(--green);font-family:'IBM Plex Mono',monospace;font-size:.95rem;">mlflow.set_experiment(nome)</h3>
+    <p style="color:var(--muted);font-size:.86rem;line-height:1.7;">Escolhe a <strong style="color:var(--text)">gaveta</strong> onde os runs vão cair, criando se não existir. Um experimento agrupa runs que respondem à mesma pergunta.</p>
+    <p style="color:var(--muted);font-size:.86rem;line-height:1.7;margin-top:8px;">A tentação é criar um experimento por aula ou por tentativa. Não faça: a tela de comparação do MLflow só compara runs <u>do mesmo experimento</u>. Treinos, retreinos e monitoramentos do turnover caem todos em <code style="color:var(--text)">turnover_rh</code> — é isso que vai permitir, na Aula 2, pôr v1 e v2 lado a lado numa tabela só.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="slide-h3" style="color:var(--green);font-family:'IBM Plex Mono',monospace;font-size:.95rem;">mlflow.start_run()</h3>
+    <p style="color:var(--muted);font-size:.86rem;line-height:1.7;">Abre <strong style="color:var(--text)">um</strong> registro e devolve um objeto com <code style="color:var(--text)">run.info.run_id</code> — o identificador que você usa para reencontrar tudo depois.</p>
+    <p style="color:var(--muted);font-size:.86rem;line-height:1.7;margin-top:8px;">Use sempre como <code style="color:var(--text)">with</code>. Ao sair do bloco o run é fechado e marcado <code style="color:var(--text)">FINISHED</code> — e se estourar uma exceção no meio, ele fecha como <code style="color:var(--text)">FAILED</code> em vez de ficar pendurado como <code style="color:var(--text)">RUNNING</code> para sempre. Tudo que você logar dentro pertence a esse run; o que estiver fora vai para um run órfão que o MLflow cria sozinho.</p>
+    <p style="color:var(--muted);font-size:.86rem;line-height:1.7;margin-top:8px;">Um run é a unidade de <strong style="color:var(--text)">"uma coisa que eu fiz e quero poder reencontrar"</strong>. Nesta disciplina: um onboarding, um retreino, um monitoramento.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="As funções do MLflow — o que escrever">
+<div class="slide-inner slide-scroll">
+
+  <span class="tag">teoria</span>
+  <h2 class="sec-title">As funções do MLflow <span style="color:var(--cyan)">— parte 2</span></h2>
+  <p class="lead">O que vai dentro do run, e a diferença entre as quatro que todo mundo confunde.</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <table class="tbl">
+      <thead><tr><th>Função</th><th>É para</th><th>Exemplo aqui</th></tr></thead>
+      <tbody>
+        <tr><td><code>log_param()</code><br><span style="font-size:.72rem;color:var(--cyan)">entrada</span></td>
+            <td>o que você <strong>escolheu antes</strong> de rodar. Escrito uma vez; sobrescrever dá erro, e isso é proposital</td>
+            <td><code>max_depth</code>, <code>n_estimators</code></td></tr>
+        <tr><td><code>log_metric()</code><br><span style="font-size:.72rem;color:var(--green)">saída</span></td>
+            <td>o que você <strong>mediu depois</strong>. Aceita <code>step</code> e pode repetir o mesmo nome — aí vira série temporal e o MLflow desenha o gráfico</td>
+            <td><code>f1</code>, <code>taxa_predicao_positiva</code></td></tr>
+        <tr><td><code>set_tags()</code><br><span style="font-size:.72rem;color:var(--purple)">etiqueta</span></td>
+            <td>texto livre para <strong>filtrar runs depois</strong>. Ao contrário de param, pode ser alterada</td>
+            <td><code>lineage=incompleto</code></td></tr>
+        <tr><td><code>log_artifact()</code><br><span style="font-size:.72rem;color:var(--orange)">arquivo</span></td>
+            <td>sobe qualquer <strong>arquivo do disco</strong> para dentro do run. Métrica responde "quanto"; artefato guarda a evidência</td>
+            <td>o relatório de drift, no Passo 8</td></tr>
+        <tr><td><code>log_input()</code><br><span style="font-size:.72rem;color:var(--pink)">lineage</span></td>
+            <td>registra <strong>qual dado entrou</strong>: nome, formato, coluna-alvo e um digest do conteúdo</td>
+            <td>a tabela <code>treino_v1</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="slide-h3">E as duas que criam a versão</h3>
+  <div class="g2">
+    <div class="card">
+      <strong style="color:var(--cyan);font-family:'IBM Plex Mono',monospace;font-size:.82rem">sklearn.log_model(..., registered_model_name=)</strong>
+      <p style="color:var(--muted);font-size:.82rem;line-height:1.7;margin-top:8px">Salva o modelo como artefato e, por causa do <code style="color:var(--text)">registered_model_name</code>, <strong style="color:var(--text)">cria uma versão nova no Model Registry</strong> na mesma tacada. Grava junto um <code style="color:var(--text)">requirements.txt</code> — o ambiente que faltava no <code>.pkl</code> solto.</p>
+    </div>
+    <div class="card">
+      <strong style="color:var(--cyan);font-family:'IBM Plex Mono',monospace;font-size:.82rem">client.set_registered_model_alias()</strong>
+      <p style="color:var(--muted);font-size:.82rem;line-height:1.7;margin-top:8px">Pendura o apelido numa versão. Esta é, literalmente, <strong style="color:var(--text)">a linha que troca a produção</strong>. Na Aula 2 ela vai promover uma v2 sem ninguém editar código.</p>
+    </div>
+  </div>
+
+  <div class="callout co-ok" style="margin-bottom:12px;">
+    <div class="ct">Na dúvida entre os quatro</div>
+    <p><code>param</code> = escolhi antes · <code>metric</code> = medi depois · <code>tag</code> = quero filtrar por isso · <code>artifact</code> = é um arquivo.</p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Por que o MLflow separa isso tudo em vez de aceitar um dicionário</div>
+    <p>Porque cada tipo vira uma coluna diferente na tela. <strong style="color:var(--text)">Param e metric viram colunas ordenáveis</strong> na tabela de runs — dá para ordenar por F1 e ver qual <code>max_depth</code> ganhou. <strong style="color:var(--text)">Tag vira filtro</strong> (<code>tags.tipo = "monitoramento"</code>). <strong style="color:var(--text)">Metric com step vira gráfico.</strong> Se tudo fosse um JSON solto, nada disso existiria.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="O que é um artefato">
+<div class="slide-inner slide-scroll">
+
+  <span class="tag">teoria</span>
+  <h2 class="sec-title">Artefato é <span style="color:var(--orange)">arquivo</span>. E é onde a evidência mora.</h2>
+  <p class="lead">Param, metric e tag são <strong style="color:var(--text)">valores</strong> — cabem numa coluna de tabela. Artefato é qualquer <strong style="color:var(--text)">arquivo</strong> que você quer preso a um run: um CSV, um PNG, um modelo serializado, um HTML. O MLflow guarda no <code class="inline">--default-artifact-root</code>, e a interface deixa você navegar e baixar.</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <table class="tbl">
+      <thead><tr><th>Você já criou artefatos em dois lugares</th><th>O quê</th><th>Quem escreveu</th></tr></thead>
+      <tbody>
+        <tr class="sep-a"><td><code>onboard_v1.py</code><br><span style="font-size:.72rem">via log_model</span></td>
+            <td><code>model.pkl</code>, <code>MLmodel</code> (a signature), <code>requirements.txt</code>, <code>conda.yaml</code>, <code>input_example.json</code></td>
+            <td>o MLflow, sozinho</td></tr>
+        <tr class="sep-c"><td><code>monitorar.py</code><br><span style="font-size:.72rem">via log_artifact</span></td>
+            <td><code>drift/drift_&lt;lote&gt;.csv</code> — a tabela inteira de comparação</td>
+            <td>você, explicitamente</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="slide-h3">A diferença que importa</h3>
+  <div class="g2" style="margin-bottom:16px;">
+    <div class="card">
+      <strong style="color:var(--green);font-size:.88rem">Métrica responde "quanto"</strong>
+      <p style="color:var(--muted);font-size:.82rem;line-height:1.7;margin-top:8px"><code style="color:var(--text)">features_em_drift = 0</code>. Um número, ordenável, comparável entre runs, plotável no tempo. Mas não diz <u>quais</u> features, nem por quê.</p>
+    </div>
+    <div class="card">
+      <strong style="color:var(--orange);font-size:.88rem">Artefato guarda a evidência</strong>
+      <p style="color:var(--muted);font-size:.82rem;line-height:1.7;margin-top:8px">O CSV com as 15 linhas, KS, razão de média e percentual de zeros de cada uma. É onde você vai <u>olhar</u> quando a métrica acender — e é onde a feature morta desta aula aparece.</p>
+    </div>
+  </div>
+
+  <div class="callout co-warn" style="margin-bottom:12px;">
+    <div class="ct">Regra prática</div>
+    <p>Se você precisa <strong style="color:var(--text)">comparar entre runs</strong>, é métrica. Se você precisa <strong style="color:var(--text)">abrir e ler para entender</strong>, é artefato. Quase todo incidente precisa dos dois: a métrica avisa, o artefato explica.</p>
+  </div>
+
+  <div class="callout co-err">
+    <div class="ct">O que não deve virar artefato</div>
+    <p>O dataset inteiro. É a tentação óbvia — "assim fica reproduzível" — e enche o disco em uma semana. Para isso existe o <code>log_input</code>, que guarda nome, formato e digest sem duplicar as linhas.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="A UI do MLflow: onde olhar e por quê">
+<div class="slide-inner slide-scroll">
+
+  <span class="gtag">✅ teste do bloco B</span>
+  <h2 class="sec-title">A mesma tela de antes, <span style="color:var(--green)">agora com um modelo</span></h2>
+  <p class="lead">Dois passos atrás você olhou essa interface vazia. Volte a <code class="inline">127.0.0.1:5000</code> e faça o tour — são quatro telas, e cada uma responde a uma pergunta diferente.</p>
+
+  <div class="ui-tour">
+    <div class="ui-item">
+      <div class="ui-n">1</div>
+      <div>
+        <h4>Experiments → turnover_rh</h4>
+        <p>A <b>tabela de runs</b>. Cada linha é uma coisa que alguém fez. As colunas de <code>Metrics</code> e <code>Parameters</code> são ordenáveis — é aqui que na Aula 2 você vai ordenar por F1 e ver v1 e v2 lado a lado. A caixa de busca aceita <code>tags.tipo = "monitoramento"</code>.</p>
+        <p class="ui-q">Responde: <i>o que já foi feito com esse modelo, e qual foi melhor?</i></p>
+      </div>
+    </div>
+
+    <div class="ui-item">
+      <div class="ui-n">2</div>
+      <div>
+        <h4>Abra o run v1_onboarding_do_pkl</h4>
+        <p>Quatro blocos: <b>Parameters</b> (o que foi escolhido), <b>Metrics</b> (o que foi medido — o seu baseline está aqui), <b>Tags</b> (inclusive as duas confissões: <code>origem=pre_mlflow</code> e <code>lineage=incompleto</code>) e <b>Datasets used</b>, que veio do <code>log_input</code>.</p>
+        <p class="ui-q">Responde: <i>de onde veio esse número e em que condições ele foi obtido?</i></p>
+      </div>
+    </div>
+
+    <div class="ui-item">
+      <div class="ui-n">3</div>
+      <div>
+        <h4>Aba Artifacts, dentro do run</h4>
+        <p>Um navegador de arquivos. Entre em <code>modelo/</code> e abra o <b>MLmodel</b>: é lá que mora a <b>signature</b>, com as 15 colunas e seus tipos. Repare no <code>requirements.txt</code> ao lado — o ambiente que faltava no <code>.pkl</code> solto agora está preso ao modelo.</p>
+        <p class="ui-q">Responde: <i>o que exatamente foi salvo, e o que esse modelo espera receber?</i></p>
+      </div>
+    </div>
+
+    <div class="ui-item">
+      <div class="ui-n">4</div>
+      <div>
+        <h4>Aba Models → turnover_rh</h4>
+        <p>O catálogo de versões, separado dos runs. A <b>versão 1</b> está lá com o alias <code>@champion</code> e um link de volta para o run que a gerou. É esta tela que a sua API consulta a cada boot.</p>
+        <p class="ui-q">Responde: <i>quem está atendendo produção agora?</i></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout co-info" style="margin-bottom:12px;">
+    <div class="ct">A distinção que confunde todo mundo no começo</div>
+    <p><b>Experiments</b> é o diário de bordo: tudo que foi tentado, inclusive o que deu errado. <b>Models</b> é o catálogo do que está publicado. Um run pode existir sem nunca virar versão — e vai acontecer, na Aula 3.</p>
+  </div>
+
+  <h3 class="slide-h3">O baseline que o terminal imprimiu</h3>
+  <div class="card" style="padding:0;overflow:hidden;">
+    <table class="tbl">
+      <thead><tr><th>Métrica na validação congelada (4.800)</th><th>Esperado</th><th>Como ler</th></tr></thead>
+      <tbody>
+        <tr><td>accuracy</td><td><strong style="color:var(--green)">0,6431</strong></td><td>acerta 64% das vezes</td></tr>
+        <tr><td>f1</td><td><strong style="color:var(--green)">0,6820</strong></td><td>o número que vai ser comparado nas 3 próximas aulas</td></tr>
+        <tr><td>precision</td><td>0,6289</td><td>de quem ele marca, 63% pede mesmo</td></tr>
+        <tr><td>recall</td><td>0,7449</td><td>de quem pede, ele pega 74%</td></tr>
+        <tr><td>taxa de predição positiva</td><td>0,6085</td><td>marca 61% das pessoas — a métrica que não precisa de rótulo</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Anote a última linha</div>
+    <p>A <strong style="color:var(--text)">taxa de predição positiva</strong> é a única aí que você consegue calcular sem saber quem pediu demissão. Em turnover o rótulo leva meses — e na Aula 2 é ela que vai denunciar o problema semanas antes do F1.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Alias e a estrutura do Postgres">
+<div class="slide-inner slide-scroll">
+
+  <span class="tag">teoria</span>
+  <h2 class="sec-title"><span style="color:var(--green)">@champion</span> é uma linha numa tabela</h2>
+  <p class="lead">Agora que a versão 1 existe, dá para olhar por dentro. Um <strong style="color:var(--text)">alias</strong> aponta para uma versão do modelo — e não é metáfora: é um registro no banco que o MLflow acabou de criar.</p>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">olhe por dentro</span>
+    <div class="code-right"><span class="lbadge">o alias é dado</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">psql -d mlflow -c &quot;SELECT * FROM registered_model_aliases;&quot;
+psql -d mlflow -c &quot;SELECT name, version, current_stage FROM model_versions;&quot;</div>
+</div>
+
+  <div class="agflow" style="margin:16px 0 18px;">
+    <div class="agnode has"><span class="an-name">@champion</span>→ versão 1<br>atende produção agora</div>
+    <div class="agnode hasnt"><span class="an-name">@challenger</span>→ versão 2<br>candidato aguardando (Aula 2)</div>
+  </div>
+
+  <div class="g3" style="margin-bottom:16px;">
+    <div class="card"><strong style="color:var(--green);font-size:.88rem">Promover</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">um UPDATE nessa linha</p></div>
+    <div class="card"><strong style="color:var(--cyan);font-size:.88rem">Fazer deploy</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">nada. A produção troca sem editar código</p></div>
+    <div class="card"><strong style="color:var(--orange);font-size:.88rem">Reverter</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">outro UPDATE. Uma linha</p></div>
+  </div>
+
+  <h3 class="slide-h3">Dois bancos, propósitos opostos</h3>
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:14px;">
+    <table class="tbl">
+      <thead><tr><th>Banco</th><th>O que guarda</th><th>O que NÃO guarda</th></tr></thead>
+      <tbody>
+        <tr class="sep-a"><td><code>mlflow</code><br><span style="font-size:.72rem">19 tabelas, criadas por ele</span></td>
+            <td>runs, params, metrics, tags e o catálogo de versões com seus aliases</td>
+            <td>nenhuma linha de dado de treino, nenhuma predição individual</td></tr>
+        <tr class="sep-c"><td><code>turnover</code><br><span style="font-size:.72rem">3 tabelas, criadas por você</span></td>
+            <td>treino, validação e o log de predições</td>
+            <td>nada sobre experimentos ou versões</td></tr>
+        <tr><td><code>./mlruns</code><br><span style="font-size:.72rem">artifact root</span></td>
+            <td>o modelo serializado, a signature, os relatórios</td>
+            <td>nada consultável por SQL — são arquivos</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-ok" style="margin-bottom:12px;">
+    <div class="ct">O MLflow não guarda os seus dados</div>
+    <p>Ele guarda uma <strong style="color:var(--text)">referência</strong> — nome, formato e um digest do conteúdo. Suficiente para responder "esse resultado veio da mesma tabela de antes?" sem duplicar 14 mil linhas lá dentro.</p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">O que ainda não é produção de verdade</div>
+    <p>O <code>--default-artifact-root ./mlruns</code> grava arquivo em disco local. Numa empresa seria S3, GCS ou MinIO — senão o modelo mora na máquina de quem rodou o treino.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Passo 6 — app/main.py">
+<div class="slide-inner slide-scroll">
+
+  <span class="bloco-mark bl-c">Bloco C · produção</span>
+  <div class="step-marker">
+    <div class="step-num c">6</div>
+    <div class="step-meta">
+      <span class="step-file">app/main.py</span>
+      <span class="step-obj">A API. Carrega o modelo do registry, pelo alias.</span>
+    </div>
+  </div>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">app/main.py</span>
+    <div class="code-right"><span class="lbadge">voce cria</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code"><span class="s">&quot;&quot;&quot;
+A API de producao.
+
+A linha mais importante do arquivo inteiro:
+
+    mlflow.sklearn.load_model(f&quot;models:/{NOME_MODELO}@{ALIAS_PROD}&quot;)
+
+Repare no que NAO esta ai: nenhum caminho de .pkl, nenhum numero de versao.
+A aplicacao pede &quot;o modelo que estiver como champion&quot;. Quem decide qual e ele
+e o Model Registry -- por isso promover uma versao troca a producao sem que
+ninguem edite uma linha de codigo.
+&quot;&quot;&quot;</span>
+<span class="k">import</span> io
+<span class="k">import</span> sys
+<span class="k">from</span> contextlib <span class="k">import</span> asynccontextmanager
+<span class="k">from</span> datetime <span class="k">import</span> datetime
+<span class="k">from</span> pathlib <span class="k">import</span> Path
+
+<span class="k">import</span> mlflow
+<span class="k">import</span> pandas <span class="k">as</span> pd
+<span class="k">from</span> fastapi <span class="k">import</span> FastAPI, UploadFile, File
+<span class="k">from</span> fastapi.responses <span class="k">import</span> FileResponse, JSONResponse
+<span class="k">from</span> fastapi.staticfiles <span class="k">import</span> StaticFiles
+<span class="k">from</span> mlflow.tracking <span class="k">import</span> MlflowClient
+<span class="k">from</span> pydantic <span class="k">import</span> BaseModel
+
+sys.path.insert(<span class="o">0</span>, <span class="o">str</span>(Path(__file__).resolve().parents[<span class="o">1</span>]))
+<span class="k">import</span> config              <span class="c"># noqa: E402</span>
+<span class="k">from</span> app <span class="k">import</span> banco      <span class="c"># noqa: E402</span>
+
+ESTATICOS = Path(__file__).resolve().parent / <span class="s">&quot;static&quot;</span>
+
+<span class="o">@</span>asynccontextmanager
+<span class="k">async</span> <span class="k">def</span> <span class="h">ciclo_de_vida</span>(app):
+    <span class="s">&quot;&quot;&quot;Roda uma vez, no boot: confere o banco e busca o modelo no registry.&quot;&quot;&quot;</span>
+    banco.conferir()
+    carregar_modelo()
+    <span class="k">yield</span>
+
+
+app = FastAPI(title=<span class="s">&quot;Turnover RH — producao&quot;</span>, lifespan=ciclo_de_vida)
+
+<span class="c"># app.mount serve arquivos de disco como arquivos de disco: o navegador pede</span>
+<span class="c"># /static/estilo.css e recebe o arquivo, sem o servidor montar nada.</span>
+app.mount(<span class="s">&quot;/static&quot;</span>, StaticFiles(directory=ESTATICOS), name=<span class="s">&quot;static&quot;</span>)
+
+<span class="c"># Estado do processo: o modelo vive na memoria, carregado uma vez.</span>
+MODELO = <span class="k">None</span>
+VERSAO = <span class="k">None</span>
+COLUNAS_CONTRATO = <span class="k">None</span>
+
+
+<span class="k">def</span> <span class="h">carregar_modelo</span>():
+    <span class="s">&quot;&quot;&quot;Le o registry pelo ALIAS e traz para a memoria. Chamado no boot e no
+    botao &#x27;Recarregar modelo&#x27;.&quot;&quot;&quot;</span>
+    <span class="k">global</span> MODELO, VERSAO, COLUNAS_CONTRATO
+    mlflow.set_tracking_uri(config.URI_TRACKING)
+    uri = f&quot;models:/{config.NOME_MODELO}@{config.ALIAS_PROD}&quot;
+    <span class="k">try</span>:
+        <span class="c"># A signature registrada e o contrato de entrada. Guardamos as colunas</span>
+        <span class="c"># para recusar CSV fora do formato -- isso vale ouro na Aula 4.</span>
+        info = mlflow.models.get_model_info(uri)
+        COLUNAS_CONTRATO = [c[<span class="s">&quot;name&quot;</span>] <span class="k">for</span> c <span class="k">in</span> info.signature.inputs.to_dict()]
+
+        <span class="c"># sklearn (e nao pyfunc) porque precisamos de predict_proba: o front</span>
+        <span class="c"># mostra probabilidade, nao 0/1. pyfunc so expoe `predict`.</span>
+        MODELO = mlflow.sklearn.load_model(uri)
+
+        versao = MlflowClient().get_model_version_by_alias(
+            config.NOME_MODELO, config.ALIAS_PROD)
+        VERSAO = versao.version
+        <span class="o">print</span>(f&quot;[modelo] versao {VERSAO} carregada de {uri}&quot;)
+    <span class="k">except</span> <span class="o">Exception</span> <span class="k">as</span> erro:
+        MODELO, VERSAO, COLUNAS_CONTRATO = <span class="k">None</span>, <span class="k">None</span>, <span class="k">None</span>
+        <span class="o">print</span>(f&quot;[modelo] nenhum modelo em producao ({<span class="o">type</span>(erro).__name__}). &quot;
+              f&quot;Rode onboard_v1.py.&quot;)
+
+
+<span class="k">class</span> <span class="h">Colaborador</span>(BaseModel):
+    <span class="s">&quot;&quot;&quot;Uma linha de entrada. Os nomes das features batem com config.FEATURES.&quot;&quot;&quot;</span>
+    id_pessoa: <span class="o">str</span> | <span class="k">None</span> = <span class="k">None</span>
+    abs_eventos: <span class="o">float</span> = <span class="o">0</span>
+    abs_qtd_total: <span class="o">float</span> = <span class="o">0</span>
+    horas_previstas_total: <span class="o">float</span> = <span class="o">0</span>
+    acidentes_eventos: <span class="o">float</span> = <span class="o">0</span>
+    acidentes_com_afastamento: <span class="o">float</span> = <span class="o">0</span>
+    acidentes_dias_perdidos: <span class="o">float</span> = <span class="o">0</span>
+    he_eventos: <span class="o">float</span> = <span class="o">0</span>
+    he_referencia_total: <span class="o">float</span> = <span class="o">0</span>
+    he_valor_total: <span class="o">float</span> = <span class="o">0</span>
+    hi_eventos: <span class="o">float</span> = <span class="o">0</span>
+    hi_minutos_irregulares: <span class="o">float</span> = <span class="o">0</span>
+    hi_minutos_extras: <span class="o">float</span> = <span class="o">0</span>
+    mov_sal_eventos: <span class="o">float</span> = <span class="o">0</span>
+    mov_sal_valor_total: <span class="o">float</span> = <span class="o">0</span>
+    mov_sal_perc_medio: <span class="o">float</span> = <span class="o">0</span>
+
+
+<span class="k">def</span> <span class="h">faixa_de</span>(prob):
+    <span class="s">&quot;&quot;&quot;ok / atencao / alerta. Regra de negocio, calculada no backend.&quot;&quot;&quot;</span>
+    <span class="k">if</span> prob &gt;= config.FAIXA_ALERTA:
+        <span class="k">return</span> <span class="s">&quot;alerta&quot;</span>
+    <span class="k">if</span> prob &gt;= config.FAIXA_ATENCAO:
+        <span class="k">return</span> <span class="s">&quot;atencao&quot;</span>
+    <span class="k">return</span> <span class="s">&quot;ok&quot;</span>
+
+
+<span class="k">def</span> <span class="h">pontuar</span>(df):
+    <span class="s">&quot;&quot;&quot;Aplica o modelo. Nunca chama fit -- treinar em producao e outra coisa.&quot;&quot;&quot;</span>
+    X = df[config.FEATURES]
+    prob = MODELO.predict_proba(X)[:, <span class="o">1</span>]
+    classe = (prob &gt;= config.LIMIAR_DECISAO).astype(<span class="o">int</span>)
+    <span class="k">return</span> prob, classe
+
+
+<span class="o">@</span>app.get(<span class="s">&quot;/&quot;</span>)
+<span class="k">def</span> <span class="h">pagina</span>():
+    <span class="k">return</span> FileResponse(ESTATICOS / <span class="s">&quot;index.html&quot;</span>)
+
+
+<span class="o">@</span>app.get(<span class="s">&quot;/saude&quot;</span>)
+<span class="k">def</span> <span class="h">saude</span>():
+    <span class="k">return</span> {
+        <span class="s">&quot;modelo_carregado&quot;</span>: MODELO <span class="k">is</span> <span class="k">not</span> <span class="k">None</span>,
+        <span class="s">&quot;versao_modelo&quot;</span>: VERSAO,
+        <span class="s">&quot;alias&quot;</span>: config.ALIAS_PROD,
+        <span class="s">&quot;modelo&quot;</span>: config.NOME_MODELO,
+        <span class="s">&quot;limiar&quot;</span>: config.LIMIAR_DECISAO,
+        <span class="s">&quot;n_features&quot;</span>: <span class="o">len</span>(COLUNAS_CONTRATO) <span class="k">if</span> COLUNAS_CONTRATO <span class="k">else</span> <span class="k">None</span>,
+        <span class="s">&quot;faixa_atencao&quot;</span>: config.FAIXA_ATENCAO,
+        <span class="s">&quot;faixa_alerta&quot;</span>: config.FAIXA_ALERTA,
+        <span class="s">&quot;lotes&quot;</span>: banco.listar_lotes(),
+    }
+
+
+<span class="o">@</span>app.get(<span class="s">&quot;/colaboradores&quot;</span>)
+<span class="k">def</span> <span class="h">colaboradores</span>():
+    <span class="s">&quot;&quot;&quot;Todos os colaboradores ja pontuados, com a faixa de risco calculada.
+
+    A faixa sai do backend de proposito: onde comeca o &#x27;alerta&#x27; e regra de
+    negocio. Se ela morasse no javascript, mudar a politica de retencao viraria
+    um deploy de front.&quot;&quot;&quot;</span>
+    <span class="k">return</span> {<span class="s">&quot;colaboradores&quot;</span>: banco.listar_colaboradores()}
+
+
+<span class="o">@</span>app.post(<span class="s">&quot;/recarregar&quot;</span>)
+<span class="k">def</span> <span class="h">recarregar</span>():
+    carregar_modelo()
+    <span class="k">return</span> saude()
+
+
+<span class="o">@</span>app.post(<span class="s">&quot;/prever&quot;</span>)
+<span class="k">def</span> <span class="h">prever</span>(colaborador: Colaborador):
+    <span class="k">if</span> MODELO <span class="k">is</span> <span class="k">None</span>:
+        <span class="k">return</span> JSONResponse({<span class="s">&quot;erro&quot;</span>: <span class="s">&quot;nenhum modelo em producao&quot;</span>}, status_code=<span class="o">503</span>)
+
+    dados = colaborador.model_dump()
+    <span class="c"># O id nao e feature: sai do dicionario antes de virar linha do modelo.</span>
+    id_pessoa = dados.pop(<span class="s">&quot;id_pessoa&quot;</span>) <span class="k">or</span> f&quot;avulso-{datetime.now():%H%M%S}&quot;
+
+    df = pd.DataFrame([dados])
+    prob, classe = pontuar(df)
+
+    banco.salvar_predicoes(
+        lote=<span class="s">&quot;avulso&quot;</span>, versao=VERSAO, ids=[id_pessoa],
+        probabilidades=prob, classes=classe, entradas=[dados])
+
+    <span class="k">return</span> {
+        <span class="s">&quot;id_pessoa&quot;</span>: id_pessoa,
+        <span class="s">&quot;probabilidade&quot;</span>: round(<span class="o">float</span>(prob[<span class="o">0</span>]), <span class="o">4</span>),
+        <span class="s">&quot;classe&quot;</span>: <span class="o">int</span>(classe[<span class="o">0</span>]),
+        <span class="s">&quot;faixa&quot;</span>: faixa_de(<span class="o">float</span>(prob[<span class="o">0</span>])),
+        <span class="s">&quot;limiar&quot;</span>: config.LIMIAR_DECISAO,
+        <span class="s">&quot;versao_modelo&quot;</span>: VERSAO,
+    }
+
+
+<span class="o">@</span>app.post(<span class="s">&quot;/lote&quot;</span>)
+<span class="k">async</span> <span class="k">def</span> <span class="h">lote</span>(arquivo: UploadFile = File(...)):
+    <span class="k">if</span> MODELO <span class="k">is</span> <span class="k">None</span>:
+        <span class="k">return</span> JSONResponse({<span class="s">&quot;erro&quot;</span>: <span class="s">&quot;nenhum modelo em producao&quot;</span>}, status_code=<span class="o">503</span>)
+
+    conteudo = <span class="k">await</span> arquivo.read()
+    df = pd.read_csv(io.BytesIO(conteudo), sep=<span class="s">&quot;;&quot;</span>)
+
+    <span class="c"># O contrato: se faltar coluna, o arquivo e recusado INTEIRO.</span>
+    faltando = [c <span class="k">for</span> c <span class="k">in</span> COLUNAS_CONTRATO <span class="k">if</span> c <span class="k">not</span> <span class="k">in</span> df.columns]
+    <span class="k">if</span> faltando:
+        <span class="k">return</span> JSONResponse({
+            <span class="s">&quot;erro&quot;</span>: <span class="s">&quot;contrato violado -- este CSV nao serve para a versao em producao&quot;</span>,
+            <span class="s">&quot;versao_modelo&quot;</span>: VERSAO,
+            <span class="s">&quot;colunas_faltando&quot;</span>: faltando,
+        }, status_code=<span class="o">422</span>)
+
+    prob, classe = pontuar(df)
+    nome = Path(arquivo.filename).stem
+    ids = df[config.COLUNA_ID] <span class="k">if</span> config.COLUNA_ID <span class="k">in</span> df.columns <span class="k">else</span> <span class="o">range</span>(<span class="o">len</span>(df))
+
+    banco.salvar_predicoes(
+        lote=nome, versao=VERSAO, ids=<span class="o">list</span>(ids),
+        probabilidades=prob, classes=classe,
+        entradas=df[config.FEATURES].to_dict(orient=<span class="s">&quot;records&quot;</span>))
+
+    <span class="k">return</span> {
+        <span class="s">&quot;lote&quot;</span>: nome,
+        <span class="s">&quot;linhas&quot;</span>: <span class="o">len</span>(df),
+        <span class="s">&quot;versao_modelo&quot;</span>: VERSAO,
+        <span class="s">&quot;taxa_predicao_positiva&quot;</span>: round(<span class="o">float</span>(classe.mean()), <span class="o">4</span>),
+        <span class="s">&quot;probabilidade_media&quot;</span>: round(<span class="o">float</span>(prob.mean()), <span class="o">4</span>),
+    }</div>
+</div>
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal 2 — API</span>
+    <div class="code-right"><span class="lbadge">agora sobe</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">uvicorn app.main:app --reload --port 8000</div>
+</div>
+
+  <div class="callout co-warn">
+    <div class="ct">Só agora o terminal 2 funciona</div>
+    <p>Antes deste passo o arquivo não existia — subir a API antes daria <code>ModuleNotFoundError</code>. Abra <code>127.0.0.1:8000</code>: o topo mostra <code>modelo v1 · @champion · 15 features</code>.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="As rotas da API">
+<div class="slide-inner slide-scroll">
+
+  <span class="tag">teoria</span>
+  <h2 class="sec-title">Cinco rotas, e o que cada uma <span style="color:var(--cyan)">toca</span></h2>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <table class="tbl">
+      <thead><tr><th>Rota</th><th>Recebe</th><th>Devolve</th><th>Escreve no banco?</th></tr></thead>
+      <tbody>
+        <tr><td><code>GET /</code></td><td>—</td><td>o <code>index.html</code> cru</td><td>não</td></tr>
+        <tr><td><code>GET /saude</code></td><td>—</td><td>versão em produção, alias, nº de features, faixas de risco e os lotes já pontuados</td><td>não — só lê</td></tr>
+        <tr><td><code>POST /prever</code></td><td>JSON com id + 15 features</td><td>probabilidade, classe e faixa</td><td><strong>sim</strong> — 1 linha em <code>predicoes</code></td></tr>
+        <tr><td><code>POST /lote</code></td><td>arquivo CSV</td><td>nº de linhas, taxa positiva, média</td><td><strong>sim</strong> — N linhas de uma vez</td></tr>
+        <tr><td><code>GET /colaboradores</code></td><td>—</td><td>todos os já pontuados, com a faixa calculada</td><td>não — só lê</td></tr>
+        <tr><td><code>POST /recarregar</code></td><td>—</td><td>o mesmo que <code>/saude</code></td><td>não — relê o registry</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="slide-h3">A linha mais importante do arquivo inteiro</h3>
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">trecho de app/main.py</span>
+    <div class="code-right"><span class="lbadge">olhe o que não está aí</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">mlflow.sklearn.load_model(f&quot;models:/{config.NOME_MODELO}@{config.ALIAS_PROD}&quot;)</div>
+</div>
+  <p class="lead">Nenhum caminho de arquivo. Nenhum número de versão. A aplicação pergunta ao registry <strong style="color:var(--text)">"quem é o champion?"</strong> e usa a resposta.</p>
+
+  <div class="g2" style="margin-bottom:14px;">
+    <div class="card">
+      <strong style="color:var(--cyan);font-family:'IBM Plex Mono',monospace;font-size:.82rem">pyfunc vs sklearn</strong>
+      <p style="color:var(--muted);font-size:.82rem;line-height:1.7;margin-top:8px"><code style="color:var(--text)">pyfunc</code> dá uma interface universal, só com <code style="color:var(--text)">predict()</code>. Usamos <code style="color:var(--text)">sklearn</code> porque o front mostra <strong style="color:var(--text)">probabilidade</strong>, e <code style="color:var(--text)">predict_proba</code> não existe na universal. O preço é acoplamento — se a v4 for XGBoost, essa linha muda.</p>
+    </div>
+    <div class="card">
+      <strong style="color:var(--green);font-family:'IBM Plex Mono',monospace;font-size:.82rem">a faixa vem do backend</strong>
+      <p style="color:var(--muted);font-size:.82rem;line-height:1.7;margin-top:8px">Onde começa o "alerta" é regra de negócio. Se morasse no javascript, mudar a política de retenção viraria um deploy de front. Por isso <code style="color:var(--text)">/prever</code> e <code style="color:var(--text)">/colaboradores</code> já devolvem a faixa pronta.</p>
+    </div>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">A signature como contrato</div>
+    <p>O <code>/lote</code> compara as colunas do CSV com a signature registrada. Faltando qualquer uma, o arquivo é <strong style="color:var(--text)">recusado inteiro</strong>, com a lista do que faltou. Parece exagero hoje; na última aula vai ser a diferença entre um erro visível e três semanas de resposta errada em silêncio.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="O front">
+<div class="slide-inner slide-scroll">
+
+  <span class="ptag">o que já está pronto</span>
+  <h2 class="sec-title">O front: HTML estático + <span style="color:var(--purple)">fetch</span></h2>
+  <p class="lead">Você recebeu o front pronto, mas vale saber o que tem dentro — na Aula 2 vocês vão mexer nele. São três abas, e ele não sabe nada sobre modelo: só chama as rotas e desenha o que voltar.</p>
+
+  <div class="g3" style="margin-bottom:16px;">
+    <div class="card"><strong style="color:var(--cyan);font-size:.86rem">Colaboradores</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">todos os já avaliados, em cards coloridos por faixa · <code>GET /colaboradores</code></p></div>
+    <div class="card"><strong style="color:var(--green);font-size:.86rem">Novo colaborador</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">formulário com as 15 features · <code>POST /prever</code></p></div>
+    <div class="card"><strong style="color:var(--orange);font-size:.86rem">Enviar lote</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">upload do CSV do mês · <code>POST /lote</code></p></div>
+  </div>
+
+  <h3 class="slide-h3">Por que não tem Jinja</h3>
+  <p class="lead" style="margin-bottom:12px;">Jinja é um renderizador de templates: o servidor pega um HTML com <code class="inline">{{ variavel }}</code>, preenche e manda a página montada. Aqui não paga o próprio custo — a página é sempre a mesma, e o que muda chega depois por <code class="inline">fetch()</code>, como JSON.</p>
+
+  <div class="yn" style="margin-bottom:16px;">
+    <div class="yn-col yn-no">
+      <h4 style="color:var(--orange)">Com Jinja</h4>
+      <ul>
+        <li>a versão do modelo vem carimbada no HTML</li>
+        <li>para atualizar o topo depois de promover: F5</li>
+        <li>mais uma dependência e mais um conceito</li>
+      </ul>
+    </div>
+    <div class="yn-col yn-yes">
+      <h4 style="color:var(--green)">Estático + JSON</h4>
+      <ul>
+        <li><code style="color:var(--text)">app.mount("/static", ...)</code> serve os arquivos</li>
+        <li><code style="color:var(--text)">GET /</code> devolve o HTML com <code style="color:var(--text)">FileResponse</code></li>
+        <li>o botão <strong style="color:var(--text)">Recarregar modelo</strong> atualiza sem F5</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">app/static/index.html</span>
+    <div class="code-right"><span class="lbadge">já está lá</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">&lt;!doctype html&gt;
+&lt;html lang=&quot;pt-BR&quot;&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width,initial-scale=1&quot;&gt;
+&lt;title&gt;Turnover RH — produção&lt;/title&gt;
+&lt;link rel=&quot;preconnect&quot; href=&quot;https://fonts.googleapis.com&quot;&gt;
+&lt;link rel=&quot;preconnect&quot; href=&quot;https://fonts.gstatic.com&quot; crossorigin&gt;
+&lt;link href=&quot;https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap&quot; rel=&quot;stylesheet&quot;&gt;
+&lt;link rel=&quot;stylesheet&quot; href=&quot;/static/estilo.css&quot;&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;header&gt;
+  &lt;h1&gt;Turnover RH &lt;span&gt;· console de produção&lt;/span&gt;&lt;/h1&gt;
+  &lt;div id=&quot;estado&quot;&gt;
+    &lt;span id=&quot;versao&quot;&gt;carregando…&lt;/span&gt;
+    &lt;button class=&quot;discreto&quot; id=&quot;btn-recarregar&quot;&gt;Recarregar modelo&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/header&gt;
+
+&lt;nav class=&quot;abas&quot;&gt;
+  &lt;button class=&quot;aba ativa&quot; data-painel=&quot;p-lista&quot;&gt;Colaboradores&lt;/button&gt;
+  &lt;button class=&quot;aba&quot; data-painel=&quot;p-novo&quot;&gt;Novo colaborador&lt;/button&gt;
+  &lt;button class=&quot;aba&quot; data-painel=&quot;p-lote&quot;&gt;Enviar lote&lt;/button&gt;
+&lt;/nav&gt;
+
+&lt;main&gt;
+
+&lt;!-- colaboradores --&gt;
+&lt;section id=&quot;p-lista&quot; class=&quot;painel ativo&quot;&gt;
+  &lt;div class=&quot;cabeca&quot;&gt;
+    &lt;div&gt;
+      &lt;h2&gt;Colaboradores avaliados&lt;/h2&gt;
+      &lt;p class=&quot;ajuda&quot;&gt;Todo mundo que já passou pelo modelo, do maior risco para o menor.&lt;/p&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;resumo&quot; id=&quot;resumo&quot;&gt;&lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;div class=&quot;filtros&quot;&gt;
+    &lt;input type=&quot;search&quot; id=&quot;busca&quot; placeholder=&quot;buscar por id ou lote…&quot;&gt;
+    &lt;button class=&quot;chip ativo&quot; data-faixa=&quot;todas&quot;&gt;todas&lt;/button&gt;
+    &lt;button class=&quot;chip&quot; data-faixa=&quot;alerta&quot;&gt;alerta&lt;/button&gt;
+    &lt;button class=&quot;chip&quot; data-faixa=&quot;atencao&quot;&gt;atenção&lt;/button&gt;
+    &lt;button class=&quot;chip&quot; data-faixa=&quot;ok&quot;&gt;ok&lt;/button&gt;
+  &lt;/div&gt;
+
+  &lt;div id=&quot;cards&quot; class=&quot;cards&quot;&gt;&lt;/div&gt;
+  &lt;p class=&quot;vazio&quot; id=&quot;vazio&quot;&gt;Nenhum colaborador avaliado ainda. Use as outras abas.&lt;/p&gt;
+&lt;/section&gt;
+
+&lt;!-- novo colaborador --&gt;
+&lt;section id=&quot;p-novo&quot; class=&quot;painel&quot;&gt;
+  &lt;h2&gt;Avaliar um colaborador&lt;/h2&gt;
+  &lt;p class=&quot;ajuda&quot;&gt;Os números são os mesmos que saíram da Aula 3, um colaborador por vez.
+     A resposta é a probabilidade de ele pedir demissão.&lt;/p&gt;
+
+  &lt;form id=&quot;form&quot;&gt;
+    &lt;label class=&quot;id-linha&quot;&gt;id do colaborador
+      &lt;input type=&quot;text&quot; name=&quot;id_pessoa&quot; placeholder=&quot;ex: 90001&quot;&gt;
+    &lt;/label&gt;
+
+    &lt;fieldset&gt;
+      &lt;legend&gt;Absenteísmo&lt;/legend&gt;
+      &lt;div class=&quot;grade&quot;&gt;
+        &lt;label&gt;eventos &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;abs_eventos&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+        &lt;label&gt;qtd total &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;abs_qtd_total&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+        &lt;label&gt;horas previstas &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;horas_previstas_total&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+      &lt;/div&gt;
+    &lt;/fieldset&gt;
+    &lt;fieldset&gt;
+      &lt;legend&gt;Acidentes&lt;/legend&gt;
+      &lt;div class=&quot;grade&quot;&gt;
+        &lt;label&gt;eventos &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;acidentes_eventos&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+        &lt;label&gt;com afastamento &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;acidentes_com_afastamento&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+        &lt;label&gt;dias perdidos &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;acidentes_dias_perdidos&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+      &lt;/div&gt;
+    &lt;/fieldset&gt;
+    &lt;fieldset&gt;
+      &lt;legend&gt;Hora extra&lt;/legend&gt;
+      &lt;div class=&quot;grade&quot;&gt;
+        &lt;label&gt;eventos &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;he_eventos&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+        &lt;label&gt;referência total &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;he_referencia_total&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+        &lt;label&gt;valor total &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;he_valor_total&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+      &lt;/div&gt;
+    &lt;/fieldset&gt;
+    &lt;fieldset&gt;
+      &lt;legend&gt;Marcações irregulares&lt;/legend&gt;
+      &lt;div class=&quot;grade&quot;&gt;
+        &lt;label&gt;eventos &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;hi_eventos&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+        &lt;label&gt;minutos irregulares &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;hi_minutos_irregulares&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+        &lt;label&gt;minutos extras &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;hi_minutos_extras&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+      &lt;/div&gt;
+    &lt;/fieldset&gt;
+    &lt;fieldset&gt;
+      &lt;legend&gt;Movimentação salarial&lt;/legend&gt;
+      &lt;div class=&quot;grade&quot;&gt;
+        &lt;label&gt;eventos &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;mov_sal_eventos&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+        &lt;label&gt;valor total &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;mov_sal_valor_total&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+        &lt;label&gt;percentual médio &lt;input type=&quot;number&quot; step=&quot;any&quot; name=&quot;mov_sal_perc_medio&quot; value=&quot;0&quot;&gt;&lt;/label&gt;
+      &lt;/div&gt;
+    &lt;/fieldset&gt;
+
+    &lt;div class=&quot;acoes&quot;&gt;
+      &lt;button type=&quot;submit&quot; class=&quot;primario&quot;&gt;Calcular risco&lt;/button&gt;
+      &lt;button type=&quot;button&quot; class=&quot;discreto&quot; id=&quot;btn-exemplo&quot;&gt;Caso de risco alto&lt;/button&gt;
+      &lt;button type=&quot;button&quot; class=&quot;discreto&quot; id=&quot;btn-exemplo-baixo&quot;&gt;Caso de risco baixo&lt;/button&gt;
+      &lt;button type=&quot;button&quot; class=&quot;discreto&quot; id=&quot;btn-zerar&quot;&gt;Zerar&lt;/button&gt;
+    &lt;/div&gt;
+  &lt;/form&gt;
+
+  &lt;div id=&quot;resultado&quot;&gt;
+    &lt;div class=&quot;leitura&quot;&gt;
+      &lt;div id=&quot;prob&quot;&gt;—&lt;/div&gt;
+      &lt;div id=&quot;veredito&quot;&gt;&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;regua&quot;&gt;
+      &lt;div class=&quot;marca&quot; id=&quot;marca-atencao&quot;&gt;&lt;/div&gt;
+      &lt;div class=&quot;marca&quot; id=&quot;marca-alerta&quot;&gt;&lt;/div&gt;
+      &lt;div class=&quot;agulha&quot; id=&quot;agulha&quot;&gt;&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;escala&quot;&gt;&lt;span&gt;0%&lt;/span&gt;&lt;span id=&quot;rot-faixas&quot;&gt;&lt;/span&gt;&lt;span&gt;100%&lt;/span&gt;&lt;/div&gt;
+    &lt;div class=&quot;saida&quot; id=&quot;json&quot;&gt;&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/section&gt;
+
+&lt;!-- enviar lote --&gt;
+&lt;section id=&quot;p-lote&quot; class=&quot;painel&quot;&gt;
+  &lt;h2&gt;Enviar um lote&lt;/h2&gt;
+  &lt;p class=&quot;ajuda&quot;&gt;Um CSV com muitos colaboradores — o que o RH manda todo mês.
+     Cada linha é pontuada e gravada na tabela &lt;span class=&quot;mono&quot;&gt;predicoes&lt;/span&gt;.
+     O nome do arquivo vira o nome do lote.&lt;/p&gt;
+
+  &lt;input type=&quot;file&quot; id=&quot;arquivo&quot; accept=&quot;.csv&quot;&gt;
+  &lt;div class=&quot;acoes&quot;&gt;&lt;button class=&quot;primario&quot; id=&quot;btn-lote&quot;&gt;Pontuar lote&lt;/button&gt;&lt;/div&gt;
+  &lt;div class=&quot;saida&quot; id=&quot;saida-lote&quot; style=&quot;display:none&quot;&gt;&lt;/div&gt;
+
+  &lt;h2 style=&quot;margin-top:26px&quot;&gt;Lotes já pontuados&lt;/h2&gt;
+  &lt;table id=&quot;tabela-lotes&quot;&gt;&lt;thead&gt;&lt;tr&gt;
+    &lt;th&gt;lote&lt;/th&gt;&lt;th&gt;linhas&lt;/th&gt;&lt;th&gt;versão&lt;/th&gt;&lt;th&gt;quando&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;/tbody&gt;&lt;/table&gt;
+
+  &lt;p class=&quot;nota&quot;&gt;Pontuar não cria nada no MLflow. A predição vira linha no banco
+     da aplicação. O MLflow só muda quando você registra, promove ou monitora.&lt;/p&gt;
+&lt;/section&gt;
+
+&lt;/main&gt;
+
+&lt;script&gt;
+const $ = s =&gt; document.querySelector(s);
+const $$ = s =&gt; document.querySelectorAll(s);
+let FAIXAS = {atencao: 0.5, alerta: 0.6};
+let TODOS = [];
+let filtro = &#x27;todas&#x27;;
+const ROTULO = {ok: &#x27;ok&#x27;, atencao: &#x27;atenção&#x27;, alerta: &#x27;alerta&#x27;};
+
+// abas
+$$(&#x27;.aba&#x27;).forEach(b =&gt; b.onclick = () =&gt; {
+  $$(&#x27;.aba&#x27;).forEach(x =&gt; x.classList.toggle(&#x27;ativa&#x27;, x === b));
+  $$(&#x27;.painel&#x27;).forEach(p =&gt; p.classList.toggle(&#x27;ativo&#x27;, p.id === b.dataset.painel));
+  if (b.dataset.painel === &#x27;p-lista&#x27;) carregarColaboradores();
+});
+
+// estado do modelo
+async function saude() {
+  const d = await (await fetch(&#x27;/saude&#x27;)).json();
+  FAIXAS = {atencao: d.faixa_atencao ?? 0.5, alerta: d.faixa_alerta ?? 0.6};
+  $(&#x27;#versao&#x27;).innerHTML = d.modelo_carregado
+    ? `modelo &lt;b&gt;v${d.versao_modelo}&lt;/b&gt; · @${d.alias} · ${d.n_features} features`
+    : `&lt;span class=&quot;off&quot;&gt;nenhum modelo em produção — rode onboard_v1.py&lt;/span&gt;`;
+
+  $(&#x27;#marca-atencao&#x27;).style.left = (FAIXAS.atencao * 100) + &#x27;%&#x27;;
+  $(&#x27;#marca-alerta&#x27;).style.left  = (FAIXAS.alerta  * 100) + &#x27;%&#x27;;
+  $(&#x27;#rot-faixas&#x27;).textContent =
+    `${(FAIXAS.atencao*100).toFixed(0)}% atenção · ${(FAIXAS.alerta*100).toFixed(0)}% alerta`;
+
+  const corpo = $(&#x27;#tabela-lotes tbody&#x27;);
+  corpo.innerHTML = &#x27;&#x27;;
+  (d.lotes || []).forEach(l =&gt; corpo.insertAdjacentHTML(&#x27;beforeend&#x27;,
+    `&lt;tr&gt;&lt;td&gt;${l.lote}&lt;/td&gt;&lt;td&gt;${l.n}&lt;/td&gt;&lt;td&gt;v${l.versoes}&lt;/td&gt;&lt;td&gt;${(l.quando||&#x27;&#x27;).slice(0,16)}&lt;/td&gt;&lt;/tr&gt;`));
+}
+
+$(&#x27;#btn-recarregar&#x27;).onclick = async () =&gt; {
+  await fetch(&#x27;/recarregar&#x27;, {method: &#x27;POST&#x27;});
+  saude();
+};
+
+// lista de colaboradores
+async function carregarColaboradores() {
+  const d = await (await fetch(&#x27;/colaboradores&#x27;)).json();
+  TODOS = d.colaboradores || [];
+  const conta = f =&gt; TODOS.filter(c =&gt; c.faixa === f).length;
+  $(&#x27;#resumo&#x27;).innerHTML = TODOS.length
+    ? `&lt;span class=&quot;tag-alerta&quot;&gt;${conta(&#x27;alerta&#x27;)} alerta&lt;/span&gt;
+       &lt;span class=&quot;tag-atencao&quot;&gt;${conta(&#x27;atencao&#x27;)} atenção&lt;/span&gt;
+       &lt;span class=&quot;tag-ok&quot;&gt;${conta(&#x27;ok&#x27;)} ok&lt;/span&gt;
+       &lt;span class=&quot;tag-total&quot;&gt;${TODOS.length} avaliados&lt;/span&gt;`
+    : &#x27;&#x27;;
+  desenhar();
+}
+
+function desenhar() {
+  const termo = $(&#x27;#busca&#x27;).value.trim().toLowerCase();
+  const lista = TODOS.filter(c =&gt;
+    (filtro === &#x27;todas&#x27; || c.faixa === filtro) &amp;&amp;
+    (!termo || String(c.id_pessoa).toLowerCase().includes(termo)
+            || String(c.lote).toLowerCase().includes(termo)));
+
+  $(&#x27;#vazio&#x27;).style.display = lista.length ? &#x27;none&#x27; : &#x27;block&#x27;;
+  $(&#x27;#vazio&#x27;).textContent = TODOS.length
+    ? &#x27;Nenhum colaborador nesse filtro.&#x27;
+    : &#x27;Nenhum colaborador avaliado ainda. Use as outras abas.&#x27;;
+
+  $(&#x27;#cards&#x27;).innerHTML = lista.map(c =&gt; `
+    &lt;article class=&quot;card-col ${c.faixa}&quot;&gt;
+      &lt;div class=&quot;col-topo&quot;&gt;
+        &lt;span class=&quot;col-id&quot;&gt;${c.id_pessoa}&lt;/span&gt;
+        &lt;span class=&quot;col-faixa&quot;&gt;${ROTULO[c.faixa]}&lt;/span&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;col-prob&quot;&gt;${(c.probabilidade * 100).toFixed(1)}&lt;span&gt;%&lt;/span&gt;&lt;/div&gt;
+      &lt;div class=&quot;col-barra&quot;&gt;&lt;i style=&quot;width:${(c.probabilidade * 100).toFixed(1)}%&quot;&gt;&lt;/i&gt;&lt;/div&gt;
+      &lt;div class=&quot;col-pe&quot;&gt;lote ${c.lote} · modelo v${c.versao_modelo}&lt;/div&gt;
+    &lt;/article&gt;`).join(&#x27;&#x27;);
+}
+
+$(&#x27;#busca&#x27;).oninput = desenhar;
+$$(&#x27;.chip&#x27;).forEach(b =&gt; b.onclick = () =&gt; {
+  $$(&#x27;.chip&#x27;).forEach(x =&gt; x.classList.toggle(&#x27;ativo&#x27;, x === b));
+  filtro = b.dataset.faixa;
+  desenhar();
+});
+
+// um colaborador
+$(&#x27;#form&#x27;).onsubmit = async (e) =&gt; {
+  e.preventDefault();
+  const dados = {};
+  new FormData($(&#x27;#form&#x27;)).forEach((v, k) =&gt; {
+    dados[k] = (k === &#x27;id_pessoa&#x27;) ? (v || null) : (parseFloat(v) || 0);
+  });
+
+  const d = await (await fetch(&#x27;/prever&#x27;, {
+    method: &#x27;POST&#x27;,
+    headers: {&#x27;Content-Type&#x27;: &#x27;application/json&#x27;},
+    body: JSON.stringify(dados)
+  })).json();
+
+  $(&#x27;#resultado&#x27;).style.display = &#x27;block&#x27;;
+  if (d.erro) {
+    $(&#x27;#json&#x27;).textContent = d.erro;
+    $(&#x27;#json&#x27;).classList.add(&#x27;erro&#x27;);
+    return;
+  }
+  $(&#x27;#json&#x27;).classList.remove(&#x27;erro&#x27;);
+
+  const faixa = d.probabilidade &gt;= FAIXAS.alerta ? &#x27;alerta&#x27;
+              : d.probabilidade &gt;= FAIXAS.atencao ? &#x27;atencao&#x27; : &#x27;ok&#x27;;
+  $(&#x27;#prob&#x27;).textContent = (d.probabilidade * 100).toFixed(1) + &#x27;%&#x27;;
+  $(&#x27;#prob&#x27;).className = faixa;
+  $(&#x27;#veredito&#x27;).innerHTML =
+    `&lt;b class=&quot;v-${faixa}&quot;&gt;${ROTULO[faixa]}&lt;/b&gt; · classe ${d.classe} · modelo v${d.versao_modelo}`;
+  $(&#x27;#agulha&#x27;).style.left = (d.probabilidade * 100) + &#x27;%&#x27;;
+  $(&#x27;#json&#x27;).textContent = JSON.stringify(d, null, 2);
+  carregarColaboradores();
+};
+
+// Dois perfis reais da base, para ver as cores mudarem.
+const EXEMPLOS = {
+  alto: {
+    abs_eventos: 0, abs_qtd_total: 0, horas_previstas_total: 0,
+    acidentes_eventos: 1, acidentes_com_afastamento: 0, acidentes_dias_perdidos: 0,
+    he_eventos: 10, he_referencia_total: 34.01, he_valor_total: 319.51,
+    hi_eventos: 1, hi_minutos_irregulares: 377, hi_minutos_extras: 0,
+    mov_sal_eventos: 1, mov_sal_valor_total: 32.56, mov_sal_perc_medio: 0.0246
+  },
+  baixo: {
+    abs_eventos: 0, abs_qtd_total: 0, horas_previstas_total: 0,
+    acidentes_eventos: 0, acidentes_com_afastamento: 0, acidentes_dias_perdidos: 0,
+    he_eventos: 57, he_referencia_total: 528.42, he_valor_total: 7349.76,
+    hi_eventos: 205, hi_minutos_irregulares: 89239, hi_minutos_extras: 0,
+    mov_sal_eventos: 12, mov_sal_valor_total: 812.73, mov_sal_perc_medio: 0.0479
+  }
+};
+
+function preencher(qual) {
+  for (const [k, v] of Object.entries(EXEMPLOS[qual])) {
+    const el = document.querySelector(`[name=&quot;${k}&quot;]`);
+    if (el) el.value = v;
+  }
+  document.querySelector(&#x27;[name=&quot;id_pessoa&quot;]&#x27;).value =
+    qual + &#x27;-&#x27; + Math.floor(Math.random() * 1000);
+}
+
+$(&#x27;#btn-exemplo&#x27;).onclick = () =&gt; preencher(&#x27;alto&#x27;);
+$(&#x27;#btn-exemplo-baixo&#x27;).onclick = () =&gt; preencher(&#x27;baixo&#x27;);
+
+$(&#x27;#btn-zerar&#x27;).onclick = () =&gt; {
+  $$(&#x27;#form input[type=number]&#x27;).forEach(i =&gt; i.value = 0);
+  document.querySelector(&#x27;[name=&quot;id_pessoa&quot;]&#x27;).value = &#x27;&#x27;;
+  $(&#x27;#resultado&#x27;).style.display = &#x27;none&#x27;;
+};
+
+// lote
+$(&#x27;#btn-lote&#x27;).onclick = async () =&gt; {
+  const f = $(&#x27;#arquivo&#x27;).files[0];
+  const saida = $(&#x27;#saida-lote&#x27;);
+  saida.style.display = &#x27;block&#x27;;
+  if (!f) {
+    saida.textContent = &#x27;Escolha um CSV primeiro.&#x27;;
+    saida.classList.add(&#x27;erro&#x27;);
+    return;
+  }
+  const fd = new FormData();
+  fd.append(&#x27;arquivo&#x27;, f);
+  saida.textContent = &#x27;pontuando…&#x27;;
+  saida.classList.remove(&#x27;erro&#x27;);
+
+  const d = await (await fetch(&#x27;/lote&#x27;, {method: &#x27;POST&#x27;, body: fd})).json();
+  saida.classList.toggle(&#x27;erro&#x27;, !!d.erro);
+  saida.textContent = JSON.stringify(d, null, 2);
+  saude();
+  carregarColaboradores();
+};
+
+saude();
+carregarColaboradores();
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</div>
+</div>
+
+</div>
+</div>
+<div class="slide" data-title="Passo 7 — O modelo respondendo">
+<div class="slide-inner slide-scroll">
+
+  <span class="bloco-mark bl-c">Bloco C · produção</span>
+  <div class="step-marker">
+    <div class="step-num c">7</div>
+    <div class="step-meta">
+      <span class="step-file">127.0.0.1:8000</span>
+      <span class="step-obj">Um colaborador de cada vez, em tempo real.</span>
+    </div>
+  </div>
+
+  <div class="test-box">
+    <div class="tt">🔍 Faça agora, na aba "Novo colaborador"</div>
+    <ol>
+      <li>Clique em <strong>Caso de risco alto</strong> e depois em <strong>Calcular risco</strong> — deve dar <strong>65,5%</strong>, card vermelho</li>
+      <li>Clique em <strong>Caso de risco baixo</strong> e calcule — <strong>3,4%</strong>, card verde</li>
+      <li>Vá para a aba <strong>Colaboradores</strong>: os dois estão lá, ordenados por risco</li>
+      <li>Confira no banco: <code>SELECT id_pessoa, probabilidade FROM predicoes WHERE lote='avulso';</code></li>
+    </ol>
+  </div>
+
+  <div class="g3" style="margin:14px 0;">
+    <div class="card" style="border-left:3px solid var(--green)"><strong style="color:var(--green);font-size:.86rem">ok · abaixo de 50%</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">classe 0 — o modelo não marcou</p></div>
+    <div class="card" style="border-left:3px solid #ffd166"><strong style="color:#ffd166;font-size:.86rem">atenção · 50 a 60%</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">passou do limiar, mas por pouco</p></div>
+    <div class="card" style="border-left:3px solid #ff4d6d"><strong style="color:#ff8fa3;font-size:.86rem">alerta · acima de 60%</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">entra na conversa de retenção</p></div>
+  </div>
+
+  <div class="callout co-err" style="margin-bottom:14px;">
+    <div class="ct">Um acerto de vocabulário</div>
+    <p>O dado que você digitou <strong style="color:var(--text)">não passa por <code>.fit()</code></strong>. Passa por <code>predict_proba()</code>. <code>fit</code> é aprender; <code>predict</code> é responder. Um modelo em produção que chama <code>fit</code> está aprendendo com quem ele atende — outra decisão, muito maior, que ninguém toma sem querer.</p>
+  </div>
+
+  <h3 class="slide-h3">O caminho completo de uma pergunta</h3>
+  <div class="ciclo">
+    <div class="ci-step ci-a"><span class="ci-n">1</span><span class="ci-t">Formulário</span>15 números + um id</div>
+    <div class="ci-step ci-a"><span class="ci-n">2</span><span class="ci-t">POST /prever</span>JSON validado pelo Pydantic</div>
+    <div class="ci-step ci-b"><span class="ci-n">3</span><span class="ci-t">predict_proba</span>o modelo que veio do registry</div>
+    <div class="ci-step ci-c"><span class="ci-n">4</span><span class="ci-t">INSERT</span>uma linha em predicoes</div>
+    <div class="ci-step ci-c"><span class="ci-n">5</span><span class="ci-t">Card colorido</span>probabilidade + faixa</div>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Classificar muda algo no MLflow?">
+<div class="slide-inner slide-scroll">
+
+  <span class="gtag">a pergunta da aula</span>
+  <h2 class="sec-title">Você acabou de classificar duas pessoas.<br>Mudou algo no <span style="color:var(--cyan)">MLflow</span>?</h2>
+  <p class="lead">Vá lá e olhe antes de continuar. A resposta é <strong style="color:var(--text)">não</strong> — e é de propósito.</p>
+
+  <div class="yn" style="margin-bottom:18px;">
+    <div class="yn-col yn-yes">
+      <h4 style="color:var(--green)">O que mudou</h4>
+      <ul>
+        <li>duas linhas novas na tabela <code style="color:var(--text)">predicoes</code></li>
+        <li>com entrada, probabilidade, classe, versão e horário</li>
+        <li>dois cards a mais na aba Colaboradores</li>
+      </ul>
+    </div>
+    <div class="yn-col yn-no">
+      <h4 style="color:var(--orange)">O que não mudou</h4>
+      <ul>
+        <li>nenhum run novo</li>
+        <li>nenhuma métrica</li>
+        <li>nenhuma versão de modelo</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout co-warn" style="margin-bottom:14px;">
+    <div class="ct">Por que não</div>
+    <p>Se cada inferência virasse um run, uma fábrica com 20 mil colaboradores geraria 20 mil runs por dia e o registro perderia qualquer utilidade. O MLflow guarda <strong style="color:var(--text)">decisões sobre o modelo</strong>; o banco <code>turnover</code> guarda <strong style="color:var(--text)">o que o modelo respondeu</strong>.</p>
+  </div>
+
+  <h3 class="slide-h3">O MLflow muda em três situações, e só nelas</h3>
+  <div class="g3">
+    <div class="card"><span class="tag">1</span><strong style="font-size:.88rem">Registrar</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">uma versão nova entra no catálogo</p></div>
+    <div class="card"><span class="gtag">2</span><strong style="font-size:.88rem">Mover um alias</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">promover ou reverter</p></div>
+    <div class="card"><span class="otag">3</span><strong style="font-size:.88rem">Fechar um monitoramento</strong><p style="color:var(--muted);font-size:.8rem;margin-top:6px">é o Passo 8, a seguir</p></div>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Passo 8 — monitorar.py">
+<div class="slide-inner slide-scroll">
+
+  <span class="bloco-mark bl-c">Bloco C · produção</span>
+  <div class="step-marker">
+    <div class="step-num c">8</div>
+    <div class="step-meta">
+      <span class="step-file">monitorar.py</span>
+      <span class="step-obj">Medir um lote já pontuado e registrar. Não cria modelo.</span>
+    </div>
+  </div>
+
+  <p class="lead" style="margin-bottom:14px;">Chegou o lote de janeiro — o professor acabou de mandar o CSV. Vá na aba <strong style="color:var(--text)">Enviar lote</strong>, suba o arquivo, e volte na aba Colaboradores para ver 1.400 cards aparecerem de uma vez.</p>
+
+  <div class="callout co-warn" style="margin-bottom:16px;">
+    <div class="ct">Repare que o arquivo não tem a coluna do alvo</div>
+    <p>Não é descuido. Em turnover o rótulo real leva meses para existir. <strong style="color:var(--text)">Antes de qualquer gabarito, o que já dá para observar?</strong></p>
+  </div>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">monitorar.py</span>
+    <div class="code-right"><span class="lbadge">voce cria</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code"><span class="s">&quot;&quot;&quot;
+Mede um lote JA PONTUADO e registra o resultado no MLflow.
+
+Nao cria modelo. Nao treina. Nao promove. So olha e escreve o que viu.
+
+    python monitorar.py --lote lote_aula1_jan
+    python monitorar.py --lote lote_aula1_jan --gabarito gabarito_aula1_jan.csv
+
+Sem gabarito, sai o que da para observar hoje: P(X) e o comportamento das
+predicoes. Com gabarito, saem tambem as metricas reais. Em turnover o rotulo
+leva meses -- por isso a primeira metade importa mais do que parece.
+&quot;&quot;&quot;</span>
+<span class="k">import</span> argparse
+
+<span class="k">import</span> mlflow
+<span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">import</span> pandas <span class="k">as</span> pd
+<span class="k">from</span> scipy.stats <span class="k">import</span> ks_2samp
+<span class="k">from</span> sklearn.metrics <span class="k">import</span> accuracy_score, f1_score, precision_score, recall_score
+
+<span class="k">import</span> config
+<span class="k">from</span> app <span class="k">import</span> banco
+
+
+<span class="k">def</span> <span class="h">comparar_distribuicoes</span>(referencia, atual):
+    <span class="s">&quot;&quot;&quot;Uma linha por feature: mudou a forma? mudou a escala? morreu?&quot;&quot;&quot;</span>
+    linhas = []
+    <span class="k">for</span> coluna <span class="k">in</span> config.FEATURES:
+        ref, atu = referencia[coluna].dropna(), atual[coluna].dropna()
+        media_ref = ref.mean()
+        linhas.append({
+            <span class="s">&quot;feature&quot;</span>: coluna,
+            <span class="s">&quot;ks&quot;</span>: round(ks_2samp(ref, atu).statistic, <span class="o">3</span>),
+            <span class="s">&quot;media_ref&quot;</span>: round(media_ref, <span class="o">3</span>),
+            <span class="s">&quot;media_atual&quot;</span>: round(atu.mean(), <span class="o">3</span>),
+            <span class="s">&quot;razao_media&quot;</span>: round(atu.mean() / media_ref, <span class="o">3</span>) <span class="k">if</span> media_ref <span class="k">else</span> np.nan,
+            <span class="s">&quot;perc_zeros_ref&quot;</span>: round((ref == <span class="o">0</span>).mean() * <span class="o">100</span>, <span class="o">1</span>),
+            <span class="s">&quot;perc_zeros_atual&quot;</span>: round((atu == <span class="o">0</span>).mean() * <span class="o">100</span>, <span class="o">1</span>),
+        })
+    <span class="k">return</span> pd.DataFrame(linhas).sort_values(<span class="s">&quot;ks&quot;</span>, ascending=<span class="k">False</span>)
+
+
+<span class="k">def</span> <span class="h">main</span>():
+    ap = argparse.ArgumentParser()
+    ap.add_argument(<span class="s">&quot;--lote&quot;</span>, required=<span class="k">True</span>, help=<span class="s">&quot;nome do lote no producao.db&quot;</span>)
+    ap.add_argument(<span class="s">&quot;--referencia&quot;</span>, default=config.TABELA_TREINO,
+                    help=<span class="s">&quot;tabela usada como espelho do passado&quot;</span>)
+    ap.add_argument(<span class="s">&quot;--gabarito&quot;</span>, default=<span class="k">None</span>, help=<span class="s">&quot;csv em dados/ com o rotulo&quot;</span>)
+    args = ap.parse_args()
+
+    atual = banco.carregar_lote(args.lote)
+    <span class="k">if</span> atual.empty:
+        <span class="k">raise</span> <span class="o">SystemExit</span>(f&quot;lote &#x27;{args.lote}&#x27; nao existe no banco. &quot;
+                         f&quot;Envie o csv pelo front primeiro.&quot;)
+    referencia = banco.carregar_conjunto(args.referencia)
+
+    relatorio = comparar_distribuicoes(referencia, atual)
+    em_drift = relatorio[relatorio[<span class="s">&quot;ks&quot;</span>] &gt; <span class="o">0.2</span>]
+    mortas = relatorio[relatorio[<span class="s">&quot;perc_zeros_atual&quot;</span>] == <span class="o">100.0</span>]
+
+    metricas = {
+        <span class="s">&quot;linhas&quot;</span>: <span class="o">len</span>(atual),
+        <span class="s">&quot;taxa_predicao_positiva&quot;</span>: round(atual[<span class="s">&quot;classe&quot;</span>].mean(), <span class="o">4</span>),
+        <span class="s">&quot;probabilidade_media&quot;</span>: round(atual[<span class="s">&quot;probabilidade&quot;</span>].mean(), <span class="o">4</span>),
+        <span class="s">&quot;features_em_drift&quot;</span>: <span class="o">len</span>(em_drift),
+        <span class="s">&quot;maior_ks&quot;</span>: <span class="o">float</span>(relatorio[<span class="s">&quot;ks&quot;</span>].<span class="o">max</span>()),
+        <span class="s">&quot;features_mortas&quot;</span>: <span class="o">len</span>(mortas),
+    }
+
+    <span class="k">if</span> args.gabarito:
+        gab = pd.read_csv(config.PASTA_DADOS / args.gabarito, sep=<span class="s">&quot;;&quot;</span>)
+        gab[config.COLUNA_ID] = gab[config.COLUNA_ID].astype(<span class="o">str</span>)
+        juntos = atual.merge(gab, on=config.COLUNA_ID, how=<span class="s">&quot;inner&quot;</span>)
+        y, y_pred = juntos[config.COLUNA_ALVO], juntos[<span class="s">&quot;classe&quot;</span>]
+        metricas.update({
+            <span class="s">&quot;accuracy&quot;</span>: round(accuracy_score(y, y_pred), <span class="o">4</span>),
+            <span class="s">&quot;f1&quot;</span>: round(f1_score(y, y_pred), <span class="o">4</span>),
+            <span class="s">&quot;precision&quot;</span>: round(precision_score(y, y_pred), <span class="o">4</span>),
+            <span class="s">&quot;recall&quot;</span>: round(recall_score(y, y_pred), <span class="o">4</span>),
+        })
+
+    config.PASTA_RELATORIOS.mkdir(exist_ok=<span class="k">True</span>)
+    caminho = config.PASTA_RELATORIOS / f&quot;drift_{args.lote}.csv&quot;
+    relatorio.to_csv(caminho, sep=<span class="s">&quot;;&quot;</span>, index=<span class="k">False</span>)
+
+    mlflow.set_tracking_uri(config.URI_TRACKING)
+    mlflow.set_experiment(config.NOME_EXPERIMENTO)
+    <span class="k">with</span> mlflow.start_run(run_name=f&quot;monitoramento_{args.lote}&quot;):
+        <span class="c"># tipo=monitoramento e o que separa este run dos runs de treino.</span>
+        <span class="c"># O historico do modelo tem que contar tambem os dias em que ele</span>
+        <span class="c"># nao era o problema.</span>
+        mlflow.set_tags({
+            <span class="s">&quot;tipo&quot;</span>: <span class="s">&quot;monitoramento&quot;</span>,
+            <span class="s">&quot;lote&quot;</span>: args.lote,
+            <span class="s">&quot;referencia&quot;</span>: args.referencia,
+            <span class="s">&quot;versao_modelo&quot;</span>: atual[<span class="s">&quot;versao_modelo&quot;</span>].iloc[<span class="o">0</span>],
+        })
+        mlflow.log_params({<span class="s">&quot;lote&quot;</span>: args.lote, <span class="s">&quot;referencia&quot;</span>: args.referencia})
+        mlflow.log_metrics(metricas)
+        mlflow.log_artifact(<span class="o">str</span>(caminho), artifact_path=<span class="s">&quot;drift&quot;</span>)
+
+    <span class="o">print</span>(f&quot;\nlote {args.lote}  ({<span class="o">len</span>(atual)} linhas, modelo v{atual[<span class="s">&#x27;versao_modelo&#x27;</span>].iloc[<span class="o">0</span>]})&quot;)
+    <span class="o">print</span>(f&quot;referencia: {args.referencia}\n&quot;)
+    <span class="o">print</span>(relatorio.to_string(index=<span class="k">False</span>))
+    <span class="o">print</span>(<span class="s">&quot;\nresumo&quot;</span>)
+    <span class="k">for</span> k, v <span class="k">in</span> metricas.items():
+        <span class="o">print</span>(f&quot;  {k:&lt;24} {v}&quot;)
+    <span class="k">if</span> <span class="o">len</span>(mortas):
+        <span class="o">print</span>(<span class="s">&quot;\n  atencao: feature(s) 100% zerada(s) -&gt; &quot;</span>
+              f&quot;{<span class="s">&#x27;, &#x27;</span>.join(mortas[<span class="s">&#x27;feature&#x27;</span>])}&quot;)
+        <span class="o">print</span>(<span class="s">&quot;  uma coluna 100% zerada nao esta em drift. Ela esta morta.&quot;</span>)
+
+
+<span class="k">if</span> __name__ == <span class="s">&quot;__main__&quot;</span>:
+    main()</div>
+</div>
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">rodar</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">python monitorar.py --lote lote_aula1_jan</div>
+</div>
+
+  <div class="g2" style="margin-top:14px;">
+    <div class="card">
+      <strong style="color:var(--cyan);font-family:'IBM Plex Mono',monospace;font-size:.84rem">ks</strong>
+      <p style="color:var(--muted);font-size:.82rem;line-height:1.7;margin-top:8px">A <strong style="color:var(--text)">forma</strong> da distribuição mudou?</p>
+    </div>
+    <div class="card">
+      <strong style="color:var(--cyan);font-family:'IBM Plex Mono',monospace;font-size:.84rem">razao_media</strong>
+      <p style="color:var(--muted);font-size:.82rem;line-height:1.7;margin-top:8px">A <strong style="color:var(--text)">escala</strong> mudou, e por qual fator?</p>
+    </div>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Teste final — o lote de janeiro">
+<div class="slide-inner slide-scroll">
+
+  <span class="gtag">✅ teste do bloco C</span>
+  <h2 class="sec-title">Janeiro é um <span style="color:var(--green)">dia normal</span> — e você tem que provar</h2>
+
+  <p class="lead">Agora o professor libera o gabarito. Salve em <code class="inline">dados/</code> e rode de novo:</p>
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">rodar</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code">python monitorar.py --lote lote_aula1_jan --gabarito gabarito_aula1_jan.csv</div>
+</div>
+
+  <div class="card" style="padding:0;overflow:hidden;margin:14px 0;">
+    <table class="tbl">
+      <thead><tr><th>O que olhar</th><th>Esperado</th><th>O que significa</th></tr></thead>
+      <tbody>
+        <tr><td>F1 no lote</td><td><strong style="color:var(--green)">0,6718</strong></td><td>baseline era 0,6820 — 1 ponto abaixo, dentro do ruído</td></tr>
+        <tr><td>accuracy</td><td>0,6336</td><td>baseline 0,6431. Em linha</td></tr>
+        <tr><td>taxa de predição positiva</td><td>0,6021</td><td>baseline 0,6085. O modelo marca a mesma proporção de sempre</td></tr>
+        <tr><td>features em drift (KS &gt; 0,2)</td><td><strong style="color:var(--green)">0</strong></td><td>a população de janeiro se parece com a do treino</td></tr>
+        <tr><td>maior KS</td><td>0,025</td><td>longe de qualquer limiar</td></tr>
+        <tr><td>features mortas</td><td><strong style="color:var(--orange)">1</strong></td><td>guarde este número</td></tr>
+        <tr><td>cards no front</td><td>≈610 alerta · 233 atenção · 557 ok</td><td>a distribuição de risco do mês</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-ok" style="margin-bottom:12px;">
+    <div class="ct">O objetivo da aula é o baseline, não o incidente</div>
+    <p>Este é o único dos quatro dias em que nada quebra. As três métricas do lote ficam um ponto abaixo do baseline — que é o que se espera de gente nova, medida por um modelo que nunca a viu. <strong style="color:var(--text)">Você não consegue dizer que algo mudou se nunca mediu como era antes.</strong></p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Volte ao MLflow</div>
+    <p>Existe um run novo com <code>tipo=monitoramento</code> e o relatório de drift como artefato. <strong style="color:var(--text)">Nenhuma versão de modelo foi criada</strong> — e isso vai se repetir. O histórico do modelo tem que contar também os dias em que o modelo não era o problema.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="A feature morta">
+<div class="slide-inner slide-scroll">
+
+  <span class="otag">achado</span>
+  <h2 class="sec-title">Uma das 15 features está <span style="color:var(--orange)">100% zerada</span></h2>
+  <p class="lead">Abra o run de monitoramento no MLflow, vá na aba <strong style="color:var(--text)">Artifacts</strong> e clique em <code class="inline">drift/drift_lote_aula1_jan.csv</code> — o arquivo que você acabou de subir com <code class="inline">log_artifact</code>. Olhe a coluna <code class="inline">perc_zeros_ref</code>: uma feature está com 100,0. E não é de hoje: <strong style="color:var(--text)">ela já era assim no dataset original da Aula 3</strong>.</p>
+
+  <div class="callout co-info" style="margin-bottom:14px;">
+    <div class="ct">Repare no que acabou de acontecer</div>
+    <p>A <strong style="color:var(--text)">métrica</strong> <code>features_mortas = 1</code> te avisou que existe um problema. O <strong style="color:var(--text)">artefato</strong> te disse qual é. Era exatamente isso que o slide sobre artefatos prometia — e é o padrão de todo incidente das próximas três aulas.</p>
+  </div>
+
+  <div class="cadeia">
+    <div class="cd-box">a coluna nunca teve informação</div>
+    <div class="cd-arrow">→</div>
+    <div class="cd-box">entrou na tabela de features</div>
+    <div class="cd-arrow">→</div>
+    <div class="cd-box">foi treinada junto na v1</div>
+    <div class="cd-arrow">→</div>
+    <div class="cd-box fim">chegou em produção sem ninguém notar</div>
+  </div>
+
+  <div class="callout co-warn" style="margin:16px 0 12px;">
+    <div class="ct">Isso não é drift</div>
+    <p>Drift é a distribuição mudar. Aqui não mudou nada — sempre foi zero. <strong style="color:var(--text)">Uma feature 100% zerada não está em drift: ela está morta.</strong> É falta de auditoria de schema, não problema de modelo.</p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Anote qual é — ela volta</div>
+    <p>Na última aula, quatro outras colunas vão morrer de repente por uma mudança de política. Aí vocês vão precisar distinguir <strong style="color:var(--text)">"morreu agora"</strong> de <strong style="color:var(--text)">"nunca esteve viva"</strong>.</p>
+  </div>
+
+  <div class="callout co-err">
+    <div class="ct">Cuidado com o oposto</div>
+    <p>No mesmo relatório, <code>abs_eventos</code> e <code>horas_previstas_total</code> aparecem com <code>razao_media</code> de 0,27 a 0,63 — parece drift enorme. Não é: o KS delas é 0,001. São colunas 99,8% zeradas, e a média está sendo puxada por meia dúzia de linhas. <strong style="color:var(--text)">Nenhuma coluna do relatório se lê sozinha.</strong></p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="O buraco no lineage">
+<div class="slide-inner slide-scroll">
+
+  <span class="ptag">o que a v1 não sabe responder</span>
+  <h2 class="sec-title">Lineage: a <span style="color:var(--purple)">certidão de nascimento</span> do modelo</h2>
+  <p class="lead"><b>Lineage</b> é a cadeia que liga um modelo em produção de volta a tudo que o produziu: qual dado, qual código, quais escolhas, qual ambiente. Serve para responder uma pergunta que sempre chega tarde e sempre com urgência — <i>"esse número saiu de onde?"</i></p>
+
+  <div class="cadeia" style="margin-bottom:18px;">
+    <div class="cd-box" style="background:rgba(0,229,255,.06);border-color:rgba(0,229,255,.3);color:var(--cyan)">extração do RH</div>
+    <div class="cd-arrow" style="color:var(--cyan)">→</div>
+    <div class="cd-box" style="background:rgba(0,229,255,.06);border-color:rgba(0,229,255,.3);color:var(--cyan)">features da Aula 3</div>
+    <div class="cd-arrow" style="color:var(--cyan)">→</div>
+    <div class="cd-box" style="background:rgba(0,229,255,.06);border-color:rgba(0,229,255,.3);color:var(--cyan)">código + hiperparâmetros</div>
+    <div class="cd-arrow" style="color:var(--cyan)">→</div>
+    <div class="cd-box fim">versão 1 em produção</div>
+  </div>
+
+  <p class="lead" style="margin-bottom:14px;">Abra o run <code class="inline">v1_onboarding_do_pkl</code> e olhe as tags: <code class="inline">origem=pre_mlflow</code> e <code class="inline">lineage=incompleto</code>. Elas não estão lá por modéstia. Estão porque <strong style="color:var(--text)">metade dessa cadeia foi reconstruída de memória</strong>, e é melhor a reconstrução estar assinada.</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <table class="tbl">
+      <thead><tr><th>O que o run afirma</th><th>De onde veio</th><th>Dá para confiar?</th></tr></thead>
+      <tbody>
+        <tr><td>dataset de origem</td><td>eu escrevi <code>treino_v1</code> na mão dentro do script</td><td><strong style="color:var(--orange)">✕ ninguém garante</strong> que foi essa tabela, nesse estado, que gerou esse pkl</td></tr>
+        <tr><td>hiperparâmetros</td><td><code>modelo.get_params()</code></td><td><strong style="color:var(--orange)">~ por sorte.</strong> O objeto sklearn ainda os carrega. Um pkl de outra biblioteca não teria</td></tr>
+        <tr><td>versão do código</td><td>—</td><td><strong style="color:var(--orange)">✕ não existe.</strong> Qual commit treinou isso? Não dá para saber</td></tr>
+        <tr><td>ambiente</td><td>gravado agora, no <code>log_model</code></td><td><strong style="color:var(--orange)">~ é o ambiente de HOJE</strong>, não o de quando o modelo foi treinado</td></tr>
+        <tr><td>métricas do baseline</td><td>recalculadas agora na validação congelada</td><td><strong style="color:var(--green)">✓ de verdade.</strong> Foram medidas, não herdadas</td></tr>
+        <tr><td>signature</td><td>inferida do X que passou agora</td><td><strong style="color:var(--green)">✓ de verdade</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-err" style="margin-bottom:12px;">
+    <div class="ct">Por que isso é incompleto e não errado</div>
+    <p>Nada ali é mentira. O problema é que <strong style="color:var(--text)">quatro das seis linhas são declarações, não observações</strong> — foram digitadas por alguém depois do fato. Se o <code>.pkl</code> tivesse chegado por e-mail de um colega que saiu da empresa, nem os hiperparâmetros existiriam.</p>
+    <p>Na prática: se a Marina perguntar amanhã <strong style="color:var(--text)">"qual extração exata gerou esse modelo?"</strong>, a resposta honesta da v1 é "provavelmente essa, mas eu não consigo provar".</p>
+  </div>
+
+  <div class="callout co-ok" style="margin-bottom:12px;">
+    <div class="ct">Da v2 em diante isso muda sozinho</div>
+    <p>Porque a v2 vai <strong style="color:var(--text)">nascer dentro</strong> do MLflow: o mesmo script que lê o dado é o que treina e o que registra, na mesma execução. O <code>log_input</code> passa a gravar o digest do dado que o <code>.fit()</code> realmente recebeu — não o que alguém acha que recebeu.</p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Por que a tag em vez de simplesmente omitir</div>
+    <p>Um run sem informação de lineage e um run com lineage reconstruído parecem iguais na tela. A tag é o que separa os dois. <strong style="color:var(--text)">Marcar a própria incerteza é mais útil que escondê-la</strong> — na Aula 2 vocês vão ver os dois runs lado a lado e a diferença explica sozinha.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Versionar o quê, e o autolog">
+<div class="slide-inner slide-scroll">
+
+  <span class="tag">teoria</span>
+  <h2 class="sec-title">O MLflow versiona <span style="color:var(--cyan)">o modelo</span>. E o resto?</h2>
+  <p class="lead">Nesta disciplina o que ganha número de versão é o <strong style="color:var(--text)">modelo em produção</strong> — v1, v2, v3, com aliases apontando para elas. Mas modelo é só uma das quatro coisas que precisam de histórico, e vale saber onde estão as outras três.</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <table class="tbl">
+      <thead><tr><th>O que</th><th>Como o MLflow trata</th><th>Suficiente?</th></tr></thead>
+      <tbody>
+        <tr class="sep-c"><td><b>Modelo</b></td>
+            <td>Model Registry: versão numerada, alias, link para o run que a gerou</td>
+            <td><strong style="color:var(--green)">✓ sim.</strong> É o forte da ferramenta</td></tr>
+        <tr><td><b>Ambiente</b></td>
+            <td><code>log_model</code> grava <code>requirements.txt</code> e <code>conda.yaml</code> junto do modelo</td>
+            <td><strong style="color:var(--green)">✓ sim</strong>, e resolve o problema do <code>.pkl</code> solto</td></tr>
+        <tr class="sep-a"><td><b>Dado</b></td>
+            <td><code>log_input</code> guarda nome, formato e um <b>digest</b> — uma impressão digital do conteúdo</td>
+            <td><strong style="color:var(--orange)">~ referência, não versão.</strong> Ele detecta que o dado mudou; não te devolve o dado antigo</td></tr>
+        <tr><td><b>Código</b></td>
+            <td>uma tag com o commit, se você lembrar de colocar</td>
+            <td><strong style="color:var(--orange)">✕ não.</strong> Quem versiona código é o git</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-warn" style="margin-bottom:14px;">
+    <div class="ct">Versionamento de dados de verdade é outra ferramenta</div>
+    <p>O digest do <code>log_input</code> responde <i>"esse dado é o mesmo de antes?"</i> — e só. Para responder <i>"me devolva a tabela exatamente como estava em janeiro"</i> você precisa de <strong style="color:var(--text)">DVC, LakeFS, Delta Lake ou snapshots do próprio banco</strong>. É por isso que o run da v1 fica marcado <code>lineage=incompleto</code> mesmo depois de tudo: metade da cadeia mora fora do MLflow.</p>
+  </div>
+
+  <h3 class="slide-h3">Explícito × autolog</h3>
+  <p class="lead" style="margin-bottom:12px;">Tudo que você escreveu no <code class="inline">onboard_v1.py</code> foi explícito: cada <code class="inline">log_param</code>, cada <code class="inline">log_metric</code>. O MLflow também sabe fazer isso sozinho:</p>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">autolog</span>
+    <div class="code-right"><span class="lbadge">so para explorar</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code"><span class="c"># uma linha, antes do .fit()</span>
+mlflow.sklearn.autolog()</div>
+</div>
+
+  <div class="g2" style="margin:14px 0 16px;">
+    <div class="card">
+      <strong style="color:var(--green);font-size:.88rem">O autolog é ótimo para explorar</strong>
+      <p style="color:var(--muted);font-size:.82rem;line-height:1.7;margin-top:8px">Uma linha antes do <code style="color:var(--text)">.fit()</code> e ele captura hiperparâmetros, métricas de treino, o modelo e a signature. Na fase de experimentação, em que você roda vinte variações, economiza muito.</p>
+    </div>
+    <div class="card">
+      <strong style="color:var(--orange);font-size:.88rem">E ruim para produção</strong>
+      <p style="color:var(--muted);font-size:.82rem;line-height:1.7;margin-top:8px">Ele registra o que <u>ele</u> decide, com os nomes que <u>ele</u> escolhe, e muda entre versões da biblioteca. As suas métricas de negócio, as tags de motivo e o dataset de origem continuam sendo sua responsabilidade — e são justamente o que importa num incidente.</p>
+    </div>
+  </div>
+
+  <h3 class="slide-h3">O esqueleto de um run explícito</h3>
+  <p class="lead" style="margin-bottom:12px;">É este o formato que a v2 vai ter na Aula 2 — agora com <code class="inline">.fit()</code> de verdade dentro, ao contrário do onboarding de hoje:</p>
+
+  <div class="code-wrap">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">esqueleto de um run</span>
+    <div class="code-right"><span class="lbadge">referência</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Clique para ver</span></div>
+  </div>
+  <div class="code"><span class="k">with</span> mlflow.start_run():
+    <span class="c"># 1. os parametros de entrada, escolhidos antes de rodar</span>
+    mlflow.log_params(params)
+
+    <span class="c"># 2. o treino em si -- o MLflow nao se mete aqui</span>
+    lr = LogisticRegression(**params)
+    lr.fit(X_train, y_train)
+
+    <span class="c"># 3. o modelo vira artefato do run (e versao, se passar registered_model_name)</span>
+    model_info = mlflow.sklearn.log_model(sk_model=lr, artifact_path=<span class="s">&quot;modelo&quot;</span>)
+
+    <span class="c"># 4. o que foi medido depois, na validacao</span>
+    y_pred = lr.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    mlflow.log_metric(<span class="s">&quot;accuracy&quot;</span>, accuracy)
+
+    <span class="c"># 5. etiquetas livres, para filtrar este run depois</span>
+    mlflow.set_tag(<span class="s">&quot;motivo&quot;</span>, <span class="s">&quot;retreino_trimestral&quot;</span>)</div>
+</div>
+
+  <div class="callout co-err" style="margin-bottom:12px;">
+    <div class="ct">Cuidado com a documentação que você achar por aí</div>
+    <p>No MLflow 3 o parâmetro virou <code>name=</code>; até a 2.x é <code>artifact_path=</code>. O kit usa <strong style="color:var(--text)">2.19</strong>, então é <code>artifact_path</code>. Copiar exemplo da versão errada dá <code>TypeError: unexpected keyword argument</code>.</p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Compare com o que você escreveu</div>
+    <p>O <code>onboard_v1.py</code> tem os passos 1, 3, 4 e 5 — e <strong style="color:var(--text)">não tem o 2</strong>. É a diferença entre adotar um modelo e treinar um. Na Aula 2 o passo 2 aparece, e com ele o lineage fica completo.</p>
+  </div>
+
+</div>
+</div>
+<div class="slide" data-title="Conferência final">
+<div class="slide-inner slide-scroll">
+
+  <span class="gtag">✅ conferência final</span>
+  <h2 class="sec-title">O que tem que estar de pé</h2>
+
+  <div class="final-check" id="final-checklist">
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">postgres acessível, banco criado, 3 tabelas do DDL</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">.env preenchido e fora do git</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">treino_v1 com 19200 linhas, validacao_congelada com 4800</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">experimento turnover_rh no MLflow</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">run v1_onboarding_do_pkl com lineage=incompleto</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">turnover_rh versão 1 com alias @champion</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">baseline registrado (accuracy, f1, precision, recall)</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">API em 127.0.0.1:8000 mostrando v1 · @champion</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">formulário devolvendo probabilidade e card colorido</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">lote de janeiro pontuado, 1400 cards nas três cores</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">run tipo=monitoramento com o drift.csv na aba Artifacts</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">zero features em drift, uma feature morta identificada</div></div>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Se algum item falhou</div>
+    <p>Os erros mais comuns: esquecer de copiar o <code>.env.exemplo</code>, esquecer o <code>-U postgres</code>, rodar o <code>preparar_dados.py</code> antes do DDL, esquecer o <code>set_tracking_uri</code> (roda e não aparece na tela), ou subir o <code>uvicorn</code> antes do <code>main.py</code> existir.</p>
+  </div>
+
+</div>
+</div>
+
+</div>
+
+<script>
+// ══════════════════════════ BG CANVAS ══════════════════════════
+const bgCanvas = document.getElementById('bg');
+const bgCtx = bgCanvas.getContext('2d');
+let BW, BH, nodes = [];
+function resizeBg() { BW = bgCanvas.width = window.innerWidth; BH = bgCanvas.height = window.innerHeight; }
+resizeBg(); window.addEventListener('resize', () => { resizeBg(); initNodes(); });
+function initNodes() {
+  nodes = [];
+  const n = Math.floor((BW * BH) / 18000);
+  for (let i = 0; i < n; i++) nodes.push({ x:Math.random()*BW, y:Math.random()*BH, vx:(Math.random()-.5)*.4, vy:(Math.random()-.5)*.4, r:Math.random()*2+1 });
+}
+initNodes();
+function drawBg() {
+  bgCtx.clearRect(0, 0, BW, BH);
+  nodes.forEach(n => { n.x += n.vx; n.y += n.vy; if(n.x<0||n.x>BW)n.vx*=-1; if(n.y<0||n.y>BH)n.vy*=-1; });
+  for (let i = 0; i < nodes.length; i++) for (let j = i+1; j < nodes.length; j++) {
+    const dx=nodes[i].x-nodes[j].x, dy=nodes[i].y-nodes[j].y, d=Math.sqrt(dx*dx+dy*dy);
+    if (d < 120) { bgCtx.beginPath(); bgCtx.moveTo(nodes[i].x,nodes[i].y); bgCtx.lineTo(nodes[j].x,nodes[j].y); bgCtx.strokeStyle=`rgba(124,58,237,${.15*(1-d/120)})`; bgCtx.lineWidth=.5; bgCtx.stroke(); }
+  }
+  nodes.forEach(n => { bgCtx.beginPath(); bgCtx.arc(n.x,n.y,n.r,0,Math.PI*2); bgCtx.fillStyle='rgba(0,229,255,.5)'; bgCtx.fill(); });
+  requestAnimationFrame(drawBg);
+}
+drawBg();
+
+// ══════════════════════════ SLIDE ENGINE ══════════════════════════
+const slideEls = Array.from(document.querySelectorAll('.slide'));
+const TOTAL = slideEls.length;
+let current = 0, maxReached = 0;
+const progressBar = document.getElementById('progress-bar');
+const counter     = document.getElementById('slide-counter');
+const titleBar    = document.getElementById('slide-title-bar');
+const navPrev     = document.getElementById('nav-prev');
+const navNext     = document.getElementById('nav-next');
+const dotsEl      = document.getElementById('dots');
+
+slideEls.forEach((_, i) => {
+  const d = document.createElement('div'); d.className = 'dot'; d.onclick = () => goTo(i);
+  dotsEl.appendChild(d);
+});
+
+function goTo(n) {
+  if (n < 0 || n >= TOTAL) return;
+  slideEls.forEach((s, i) => { s.classList.remove('active', 'prev'); if (i < n) s.classList.add('prev'); });
+  slideEls[n].classList.add('active');
+  slideEls[n].scrollTop = 0;
+  current = n;
+  if (n > maxReached) maxReached = n;
+  updateUI();
+  onSlideEnter(current);
+}
+
+function updateUI() {
+  progressBar.style.width = ((current + 1) / TOTAL * 100) + '%';
+  counter.textContent = `${current + 1} / ${TOTAL}`;
+  titleBar.textContent = slideEls[current].dataset.title || '';
+  navPrev.classList.toggle('disabled', current === 0);
+  navNext.classList.toggle('disabled', current === TOTAL - 1);
+  document.querySelectorAll('.dot').forEach((d,i) => {
+    d.classList.toggle('active', i === current);
+    d.classList.toggle('done', i < current);
+  });
+}
+
+navPrev.onclick = () => goTo(current - 1);
+navNext.onclick = () => goTo(current + 1);
+document.addEventListener('keydown', e => {
+  if (e.target.closest('.code')) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(current + 1);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(current - 1);
+});
+requestAnimationFrame(() => goTo(0));
+
+function onSlideEnter(n) {
+  if (slideEls[n].dataset.title === 'Conferência final') {
+    const el = document.getElementById('final-checklist');
+    el.classList.remove('play'); void el.offsetWidth; el.classList.add('play');
+  }
+}
+
+// ══════════════════════════ CÓDIGO ESCONDIDO ══════════════════════════
+function toggleCode(header) {
+  const wrap = header.parentElement;
+  const open = wrap.classList.toggle('open');
+  const btn = header.querySelector('.code-toggle-btn');
+  if (btn) btn.textContent = open ? 'Ocultar' : 'Clique para ver';
+}
+
+// ══════════════════════════ COPIAR CÓDIGO ══════════════════════════
+function copyCode(evento, botao) {
+  evento.stopPropagation();
+  const wrap = botao.closest('.code-wrap');
+  const texto = wrap.querySelector('.code').textContent;
+  const feedback = (ok) => {
+    botao.textContent = ok ? '✓ Copiado' : 'Falhou';
+    botao.classList.toggle('done', ok);
+    setTimeout(() => { botao.textContent = 'Copiar'; botao.classList.remove('done'); }, 1800);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(texto).then(() => feedback(true), () => feedback(false));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = texto; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    feedback(ok);
+  }
+}
+</script>
+</body>
+</html>

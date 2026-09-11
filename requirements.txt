@@ -1,0 +1,12 @@
+# Versoes fixas: o modelo_v1.pkl que voce recebeu foi serializado com estas.
+# Pickle nao carrega o proprio ambiente -- e por isso que ele precisa vir
+# escrito aqui do lado. Guarde essa observacao, ela volta no Passo 2.
+mlflow==2.19.0
+scikit-learn==1.8.0
+pandas
+scipy
+psycopg2-binary
+python-dotenv
+fastapi
+uvicorn[standard]
+python-multipart
