@@ -76,8 +76,10 @@ def carregar_lote(nome):
     """DataFrame com as features + predicoes de um lote ja pontuado."""
     with conectar() as con, con.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            "SELECT id_pessoa, versao_modelo, probabilidade, classe, features "
-            "FROM predicoes WHERE lote = %s ORDER BY id", (nome,))
+            "SELECT DISTINCT ON (id_pessoa) "
+            "       id_pessoa, versao_modelo, probabilidade, classe, features "
+            "FROM predicoes WHERE lote = %s "
+            "ORDER BY id_pessoa, id DESC", (nome,))
         linhas = cur.fetchall()
     if not linhas:
         return pd.DataFrame()
@@ -93,7 +95,7 @@ def carregar_lote(nome):
     return pd.concat([meta, features], axis=1)
 
 
-def listar_colaboradores(limite=2000):
+def listar_colaboradores(limite=5000):
     """Todos os colaboradores ja pontuados, do mais recente para o mais antigo.
     A faixa de risco sai daqui pronta -- e regra de negocio, nao de front."""
     with conectar() as con, con.cursor(cursor_factory=RealDictCursor) as cur:
@@ -116,6 +118,48 @@ def listar_colaboradores(limite=2000):
             for p in pessoas[:limite]]
 
 
+def resumo_por_lote():
+    """Totais na tabela inteira, nao na lista truncada dos cards.
+
+    DISTINCT ON (lote, id_pessoa) usa a pontuacao mais recente de cada
+    pessoa no lote -- reenviar fevereiro nao duplica a conta.
+    """
+    alerta, atencao = config.FAIXA_ALERTA, config.FAIXA_ATENCAO
+    with conectar() as con, con.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            WITH ultimas AS (
+                SELECT DISTINCT ON (lote, id_pessoa)
+                       lote, versao_modelo, probabilidade, classe
+                FROM predicoes
+                ORDER BY lote, id_pessoa, id DESC
+            )
+            SELECT lote,
+                   COUNT(*)::int AS n,
+                   AVG(classe::double precision) AS positiva,
+                   AVG(probabilidade) AS media,
+                   STRING_AGG(DISTINCT versao_modelo, ',') AS versoes,
+                   COUNT(*) FILTER (WHERE probabilidade >= %s)::int AS alerta,
+                   COUNT(*) FILTER (
+                       WHERE probabilidade >= %s AND probabilidade < %s)::int AS atencao,
+                   COUNT(*) FILTER (WHERE probabilidade < %s)::int AS ok
+            FROM ultimas
+            GROUP BY lote
+            """,
+            (alerta, atencao, alerta, atencao))
+        linhas = cur.fetchall()
+    return [{
+        "lote": r["lote"],
+        "n": int(r["n"]),
+        "positiva": float(r["positiva"] or 0),
+        "media": float(r["media"] or 0),
+        "versoes": r["versoes"] or "",
+        "alerta": int(r["alerta"]),
+        "atencao": int(r["atencao"]),
+        "ok": int(r["ok"]),
+    } for r in linhas]
+
+
 def listar_lotes():
     with conectar() as con, con.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -124,3 +168,31 @@ def listar_lotes():
             "FROM predicoes GROUP BY lote ORDER BY quando DESC")
         return [dict(linha) | {"quando": str(linha["quando"])}
                 for linha in cur.fetchall()]
+
+def existe_tabela(nome):
+    """O monitorar.py usa para aceitar tabela OU nome de lote na referencia."""
+    with conectar() as con, con.cursor() as cur:
+        cur.execute("SELECT to_regclass(%s) IS NOT NULL", (nome,))
+        return cur.fetchone()[0]
+
+
+def acumular_validacao_atual(df):
+    """ANEXA um lote rotulado ao conjunto de aceitacao.
+
+    Acumula de proposito, nao substitui. Se cada mes apagasse o anterior, o
+    juiz seria sempre 100% da unidade mais recente -- e superestimaria o ganho
+    de um modelo especializado nela.
+
+    ON CONFLICT DO NOTHING: rodar o treino duas vezes nao duplica ninguem.
+    """
+    colunas = ([config.COLUNA_ID] + config.FEATURES
+               + [config.COLUNA_ALVO, "origem"])
+    linhas = [tuple(linha) for linha in df[colunas].itertuples(index=False)]
+    with conectar() as con, con.cursor() as cur:
+        execute_values(cur,
+            f"INSERT INTO {config.TABELA_VALIDACAO_ATUAL} "
+            f"({', '.join(colunas)}) VALUES %s "
+            f"ON CONFLICT ({config.COLUNA_ID}) DO NOTHING", linhas)
+        cur.execute(f"SELECT count(*) FROM {config.TABELA_VALIDACAO_ATUAL}")
+        total = cur.fetchone()[0]
+    return len(linhas), total

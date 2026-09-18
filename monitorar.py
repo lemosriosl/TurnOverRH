@@ -53,6 +53,16 @@ def main():
         raise SystemExit(f"lote '{args.lote}' nao existe no banco. "
                          f"Envie o csv pelo front primeiro.")
     referencia = banco.carregar_conjunto(args.referencia)
+        # A referencia pode ser uma tabela (treino_v1, validacao_atual) ou um lote
+    # que a API ja pontuou (lote_aula2_fev). O segundo caso e o que permite
+    # comparar "este mes contra o mes passado" em vez de contra o treino.
+    if banco.existe_tabela(args.referencia):
+        referencia = banco.carregar_conjunto(args.referencia)
+    else:
+        referencia = banco.carregar_lote(args.referencia)
+        if referencia.empty:
+            raise SystemExit(
+                f"'{args.referencia}' nao e tabela nem lote pontuado.")
 
     relatorio = comparar_distribuicoes(referencia, atual)
     em_drift = relatorio[relatorio["ks"] > 0.2]

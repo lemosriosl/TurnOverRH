@@ -115,3 +115,16 @@ if __name__ == "__main__":
           " --port 5000"
           f" --backend-store-uri {URI_BANCO_MLFLOW}"
           " --default-artifact-root ./mlruns")
+
+# DOIS conjuntos de teste, com papeis diferentes -- um nao substitui o outro:
+#
+#   validacao_congelada  GUARDA DE REGRESSAO. Nunca muda, nunca e apagada.
+#                        Responde "eu quebrei o que ja funcionava?"
+#   validacao_atual      CONJUNTO DE ACEITACAO. Representa a populacao que o
+#                        modelo atende HOJE. Cresce a cada lote rotulado.
+#                        Responde "serve para o mundo de agora?"
+TABELA_VALIDACAO_ATUAL = "validacao_atual"
+
+# Ganho minimo de F1 para o candidato substituir o campeao.
+# Abaixo disso a troca nao paga o risco de mexer em producao.
+GANHO_MINIMO = 0.005

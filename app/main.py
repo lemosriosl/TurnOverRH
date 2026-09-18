@@ -140,7 +140,7 @@ def colaboradores():
     A faixa sai do backend de proposito: onde comeca o 'alerta' e regra de
     negocio. Se ela morasse no javascript, mudar a politica de retencao viraria
     um deploy de front."""
-    return {"colaboradores": banco.listar_colaboradores()}
+    return {"colaboradores": banco.listar_colaboradores(), "resumo": banco.resumo_por_lote(),}
 
 
 @app.post("/recarregar")
