@@ -39,6 +39,66 @@ def comparar_distribuicoes(referencia, atual):
         })
     return pd.DataFrame(linhas).sort_values("ks", ascending=False)
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  A ÚNICA ALTERAÇÃO DE CÓDIGO DA AULA 3 · monitorar.py
+#
+#  Duas funções novas e uma linha trocada. Faça agora e não mexa mais em
+#  código pelo resto da aula.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+# ─────────────────────────────────────────────────────────────── 1 de 2 ──
+# Cole depois de comparar_distribuicoes() e antes de main().
+
+def existe_tabela(nome):
+    """Pergunta ao Postgres se o nome é uma tabela. to_regclass devolve NULL
+    quando não é, em vez de estourar exceção -- por isso ele, e não um SELECT
+    de teste dentro de try/except, que abortaria a transação."""
+    with banco.conectar() as con, con.cursor() as cur:
+        cur.execute("SELECT to_regclass(%s) IS NOT NULL", (nome,))
+        return cur.fetchone()[0]
+
+
+def carregar_referencia(nome):
+    """Aceita o nome de uma TABELA (treino_v1, validacao_atual) ou de um LOTE
+    já pontuado (lote_aula2_fev).
+
+    Até a Aula 2 a referência era sempre uma tabela, porque a pergunta era
+    sempre "mudou em relação ao treino?". Hoje a pergunta é outra: "março é
+    diferente de FEVEREIRO?" -- e fevereiro não é tabela nenhuma, é um lote que
+    passou pela API e virou linha em `predicoes`.
+
+    Isso só funciona porque, desde a Aula 1, a aplicação guarda a ENTRADA exata
+    que recebeu no campo JSONB, não só a resposta que deu. Sem aquele campo,
+    comparar um mês contra o anterior seria impossível.
+    """
+    if existe_tabela(nome):
+        return banco.carregar_conjunto(nome)
+    referencia = banco.carregar_lote(nome)
+    if referencia.empty:
+        raise SystemExit(
+            f"'{nome}' não é tabela nem lote pontuado.\n"
+            f"Se for um lote, confira o nome na tabela 'Lotes já pontuados' do front.")
+    return referencia
+
+
+# ─────────────────────────────────────────────────────────────── 2 de 2 ──
+# Dentro de main(), onde hoje está:
+#
+#     referencia = banco.carregar_conjunto(args.referencia)
+#
+# passa a ser:
+
+    referencia = carregar_referencia(args.referencia)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Pronto. Nada mais muda no projeto hoje.
+#
+#  comparar_distribuicoes() continua igual: ela só usa config.FEATURES, e um
+#  lote pontuado tem todas elas. O que o lote não tem é o rótulo -- que aqui
+#  não é usado mesmo.
+# ═══════════════════════════════════════════════════════════════════════════
 
 def main():
     ap = argparse.ArgumentParser()
@@ -52,7 +112,7 @@ def main():
     if atual.empty:
         raise SystemExit(f"lote '{args.lote}' nao existe no banco. "
                          f"Envie o csv pelo front primeiro.")
-    referencia = banco.carregar_conjunto(args.referencia)
+    referencia = carregar_referencia(args.referencia)
         # A referencia pode ser uma tabela (treino_v1, validacao_atual) ou um lote
     # que a API ja pontuou (lote_aula2_fev). O segundo caso e o que permite
     # comparar "este mes contra o mes passado" em vez de contra o treino.
